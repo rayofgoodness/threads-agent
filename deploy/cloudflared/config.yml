@@ -23,14 +23,14 @@ originRequest:
 
 ingress:
   - hostname: quarters.casa
-    service: http://127.0.0.1:8787
+    service: http://127.0.0.1:8788
     originRequest:
       # The dashboard and the API are the same origin; no host rewrite needed.
       httpHostHeader: quarters.casa
 
   # The apex alone does not cover www; add the record only if you route it.
   - hostname: www.quarters.casa
-    service: http://127.0.0.1:8787
+    service: http://127.0.0.1:8788
     originRequest:
       httpHostHeader: quarters.casa
 

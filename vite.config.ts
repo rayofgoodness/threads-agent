@@ -14,7 +14,7 @@ export default defineConfig({
     // Keeps the access token server-side: the app calls same-origin /api,
     // which this proxy forwards to `npm run server`.
     proxy: {
-      '/api': 'http://localhost:8787',
+      '/api': 'http://localhost:8788',
     },
   },
   resolve: {

@@ -53,7 +53,7 @@ CLIs need `source .env` first.
 ## Running
 
 ```sh
-npm run server   # JSON API on :8787
+npm run server   # JSON API on :8788
 npm run dev      # Vue app on :5173, proxying /api to the server
 ```
 

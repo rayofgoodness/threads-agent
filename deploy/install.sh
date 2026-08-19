@@ -104,7 +104,7 @@ systemctl is-active --quiet threads-agent.service ||
 if command -v curl >/dev/null; then
   note "/api/health відповідає $(curl -s -o /dev/null -w '%{http_code}' \
     -H "Authorization: Bearer $(grep -E '^THREADS_AGENT_TOKEN=' "$APP_DIR/.env" | cut -d= -f2-)" \
-    http://127.0.0.1:8787/api/health)"
+    http://127.0.0.1:8788/api/health)"
 fi
 
 cat <<EOF

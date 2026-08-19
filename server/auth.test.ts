@@ -21,7 +21,7 @@ describe('checkAuth', () => {
 
 describe('resolveBinding', () => {
   it('defaults to loopback', () => {
-    expect(resolveBinding({}, undefined)).toEqual({ host: '127.0.0.1', port: 8787 })
+    expect(resolveBinding({}, undefined)).toEqual({ host: '127.0.0.1', port: 8788 })
   })
 
   it('refuses a public interface without a secret', () => {

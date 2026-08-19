@@ -25,7 +25,7 @@ Current state and open tasks: @PROGRESS.md
 - `npm run lint` — `eslint . --fix` (config in `eslint.config.ts`; `docs/` is ignored)
 - `npm run format` — Prettier over `src/` (no semicolons, single quotes, width 100)
 
-- `npm run server` — JSON API over the Threads client on port 8787 (`PORT` overrides).
+- `npm run server` — JSON API over the Threads client on port 8788 (`PORT` overrides).
   It loads `.env` itself via `process.loadEnvFile`, so no `source` needed.
 - `node scripts/agent.ts <command>` — content queue and scheduling
   (`list`, `add`, `check`, `due`, `run`, `published`, `slots`). `run` is a dry
@@ -182,7 +182,7 @@ loopback address without the token, because `/api` can publish and delete.
 of the browser: `http.ts` is a small router plus the error mapping (Threads codes
 → HTTP status: permission → 403, missing object → 404, quota → 429, anything
 else → 502), `index.ts` declares the routes. `vite.config.ts` proxies `/api` to
-port 8787 in development, so the Vue app calls `/api/...` with no CORS involved.
+port 8788 in development, so the Vue app calls `/api/...` with no CORS involved.
 
 ### The Vue app
 

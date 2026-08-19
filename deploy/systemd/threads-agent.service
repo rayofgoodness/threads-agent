@@ -22,7 +22,7 @@ EnvironmentFile=/opt/threads-agent/.env
 # port from the network. Setting HOST to anything else requires
 # THREADS_AGENT_TOKEN — the server refuses the unauthenticated combination.
 Environment=HOST=127.0.0.1
-Environment=PORT=8787
+Environment=PORT=8788
 Environment=NODE_ENV=production
 
 ExecStart=/usr/bin/node server/index.ts

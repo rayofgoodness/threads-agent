@@ -40,7 +40,7 @@ export function resolveBinding(
   secret: string | undefined,
 ): Binding {
   const host = env.HOST ?? '127.0.0.1'
-  const port = Number(env.PORT ?? 8787)
+  const port = Number(env.PORT ?? 8788)
 
   if (!LOOPBACK.has(host) && !secret) {
     throw new Error(

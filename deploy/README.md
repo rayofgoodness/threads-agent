@@ -5,7 +5,7 @@ loopback; `cloudflared` dials out to Cloudflare and forwards the hostname to it.
 Nothing is port-forwarded, and the origin is never reachable directly.
 
 ```
-browser → https://quarters.casa → Cloudflare edge (TLS, Access) → tunnel → 127.0.0.1:8787 on the Pi
+browser → https://quarters.casa → Cloudflare edge (TLS, Access) → tunnel → 127.0.0.1:8788 on the Pi
 ```
 
 ## Before anything: the API is not read-only
