@@ -154,6 +154,11 @@ launchctl kickstart -p "gui/$UID/com.casy.threads-agent.publish"   # run once no
 launchctl bootout "gui/$UID/com.casy.threads-agent.publish"        # stop it
 ```
 
+That template is for running the loop on a Mac during development; in
+production the Pi's systemd timer does it (`deploy/`). Do not enable both
+against the same account — two machines with separate copies of `content/` would
+each publish their own queue.
+
 It fires every 15 minutes rather than at the configured slots: the queue decides
 what is due, the daily cap bounds it, and a machine asleep at 09:30 still
 publishes on waking. **While it is loaded, anything queued goes public without
