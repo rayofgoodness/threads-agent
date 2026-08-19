@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OAuth Callback — Threads Agent</title>
+<link rel="stylesheet" href="./style.css">
+<style>
+  pre {
+    background: rgba(128,128,128,.12);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: .9rem 1rem;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    font-size: .9rem;
+  }
+  button {
+    font: inherit;
+    padding: .5rem .9rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--fg);
+    cursor: pointer;
+  }
+  .err { color: #d93025; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Authorization callback</h1>
+  <p class="updated">Threads Agent · OAuth redirect target</p>
+
+  <div class="box">
+    <h2 style="margin-top:0">Authorization code</h2>
+    <pre id="code">…</pre>
+    <button id="copy" type="button">Copy code</button>
+  </div>
+
+  <div class="box" id="err-box" hidden>
+    <h2 style="margin-top:0" class="err">Error from Meta</h2>
+    <pre id="err"></pre>
+  </div>
+
+  <h2>All query parameters</h2>
+  <pre id="all"></pre>
+
+  <footer>
+    <a href="./index.html">Home</a> · <a href="./privacy.html">Privacy Policy</a> · <a href="./data-deletion.html">Data Deletion</a>
+  </footer>
+</main>
+
+<script>
+  // Meta may return params in the query string or after the hash (implicit flow).
+  const search = new URLSearchParams(window.location.search);
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const params = new URLSearchParams([...search, ...hash]);
+
+  const code = params.get('code');
+  document.getElementById('code').textContent = code || 'no code found';
+
+  const error = params.get('error') || params.get('error_type');
+  if (error) {
+    document.getElementById('err-box').hidden = false;
+    document.getElementById('err').textContent = [
+      'error: ' + error,
+      params.get('error_reason') ? 'reason: ' + params.get('error_reason') : null,
+      params.get('error_description') ? 'description: ' + params.get('error_description') : null,
+      params.get('error_message') ? 'message: ' + params.get('error_message') : null,
+    ].filter(Boolean).join('\n');
+  }
+
+  const all = [...params].map(([k, v]) => k + ' = ' + v).join('\n');
+  document.getElementById('all').textContent = all || '(none)';
+
+  document.getElementById('copy').addEventListener('click', () => {
+    if (!code) return;
+    navigator.clipboard.writeText(code).then(() => {
+      const btn = document.getElementById('copy');
+      btn.textContent = 'Copied';
+      setTimeout(() => { btn.textContent = 'Copy code'; }, 1500);
+    });
+  });
+</script>
+</body>
+</html>
