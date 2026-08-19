@@ -27,6 +27,9 @@ Current state and open tasks: @PROGRESS.md
 
 - `npm run server` — JSON API over the Threads client on port 8787 (`PORT` overrides).
   It loads `.env` itself via `process.loadEnvFile`, so no `source` needed.
+- `node scripts/agent.ts <command>` — content queue and scheduling
+  (`list`, `add`, `check`, `due`, `run`, `published`, `slots`). `run` is a dry
+  run; only `run --yes` publishes.
 - `node scripts/threads.ts <command>` — terminal access to the Threads client
   (`whoami`, `token`, `limits`, `posts`, `post`, `delete`, `insights`, `replies`).
   Needs `source .env` first. Node type-strips the `.ts` directly, no build step —
@@ -93,6 +96,19 @@ status), `types.ts` (response shapes). It is **server-side only**: it holds the
 token and Threads sends no CORS headers, so importing it into the Vue bundle
 would leak the secret and fail at runtime. Reach it from `scripts/` or a backend
 route, never from a component.
+
+### The agent layer
+
+`agent/` turns files into a schedule: `config.ts` reads `agent.config.json`
+(slots, daily cap, length bounds, banned phrases), `queue.ts` reads and writes
+the markdown files under `content/`, `publisher.ts` applies the guardrails and
+the daily cap, then publishes and moves the file to `content/published/` with
+its post id recorded. A failure is written back into the file's `note` and the
+item stays queued.
+
+Content is deliberately files, not a database — drafts, edits and publish
+history all show up in `git diff`. `content/README.md` documents the format.
+Publishing defaults to dry: `runDue` does nothing without `commit: true`.
 
 ### The API server
 

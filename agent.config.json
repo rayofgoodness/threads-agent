@@ -1,0 +1,18 @@
+{
+  "account": "calendarsync",
+  "timezone": "Europe/Kyiv",
+  "content": {
+    "queueDir": "content/queue",
+    "publishedDir": "content/published",
+    "knowledgeDir": "content/knowledge"
+  },
+  "schedule": {
+    "slots": ["09:30", "18:00"],
+    "maxPerDay": 2
+  },
+  "guardrails": {
+    "maxLength": 500,
+    "minLength": 40,
+    "bannedPhrases": ["Дізнайтеся більше за посиланням", "Не пропустіть"]
+  }
+}
