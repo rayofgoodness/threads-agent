@@ -1,0 +1,35 @@
+# Postgres for generation history and post analytics.
+#
+# Content stays in `content/` as markdown — this database holds only what git
+# is bad at. The agent runs without it; `DATABASE_URL` is what turns it on.
+#
+#   docker compose up -d      # start
+#   npm run db:migrate        # apply db/schema.sql to an existing volume
+#   docker compose down       # stop, keeping the data
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: threads-agent-db
+    restart: unless-stopped
+    # Bound to loopback: nothing outside this machine has any business here.
+    # The host port is deliberately not 5432 — a local Postgres keeps working.
+    ports:
+      - '127.0.0.1:${POSTGRES_PORT:-55432}:5432'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-threads}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-threads}
+      POSTGRES_DB: ${POSTGRES_DB:-threads_agent}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Runs on first boot of an empty volume only; `npm run db:migrate`
+      # is what applies changes to a volume that already exists.
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test:
+        ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-threads} -d ${POSTGRES_DB:-threads_agent}']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:

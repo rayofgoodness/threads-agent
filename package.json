@@ -14,14 +14,20 @@
     "server": "node server/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint:check": "eslint ."
+    "lint:check": "eslint .",
+    "db:migrate": "node db/migrate.ts",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.118.0",
+    "pg": "^8.23.0",
     "vue": "^3.5.40"
   },
   "devDependencies": {
     "@tsconfig/node24": "^24.0.4",
     "@types/node": "^24.13.3",
+    "@types/pg": "^8.23.1",
     "@vitejs/plugin-vue": "^6.0.8",
     "@vue/eslint-config-prettier": "^10.2.0",
     "@vue/eslint-config-typescript": "^14.9.0",

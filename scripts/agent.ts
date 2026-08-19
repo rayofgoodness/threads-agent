@@ -11,6 +11,13 @@ import { loadConfig } from '../agent/config.ts'
 import { addItem, listPublished, listQueue, dueItems } from '../agent/queue.ts'
 import { checkGuardrails, publishedToday, runDue } from '../agent/publisher.ts'
 import { collectSignals } from '../agent/monitor.ts'
+import { markTopicDone, pendingTopics, readPlan } from '../agent/plan.ts'
+import { generateDrafts } from '../agent/generator.ts'
+import { closeDb, markDraftQueued, recordGeneration, tryRecord } from '../db/index.ts'
+import { nextSlots as slotsAfter } from '../agent/schedule.ts'
+
+/** Bound to the loaded config so the call sites stay `nextSlots(n)`. */
+const nextSlots = (count?: number) => slotsAfter(config, count)
 
 const [command = 'help', ...args] = process.argv.slice(2)
 const config = loadConfig()
@@ -24,24 +31,11 @@ Commands:
   run [--yes]             publish everything due; without --yes it only reports
   published               what has already gone out
   slots                   the next few configured publishing slots
+  plan                    the content plan and what is still open in it
+  generate [--yes]        draft posts in the account's voice; --yes queues them
+           [--count N] [--brief "..."]
   watch [--all]           inbound signals: replies, mentions, watched keywords
 `
-
-/** Next occurrence of each configured slot, in the account's timezone. */
-function nextSlots(count = 4): string[] {
-  const slots: string[] = []
-  const now = new Date()
-  for (let day = 0; slots.length < count && day < 14; day++) {
-    for (const slot of config.schedule.slots) {
-      const [hours = '0', minutes = '0'] = slot.split(':')
-      const when = new Date(now)
-      when.setDate(now.getDate() + day)
-      when.setHours(Number(hours), Number(minutes), 0, 0)
-      if (when > now && slots.length < count) slots.push(when.toISOString())
-    }
-  }
-  return slots
-}
 
 function flag(name: string): string | undefined {
   const index = args.indexOf(name)
@@ -137,6 +131,59 @@ async function main() {
       for (const gap of report.unavailable) {
         console.log(`недоступно (${gap.source}): ${gap.reason}`)
       }
+      return
+    }
+
+    case 'plan': {
+      const plan = readPlan(config)
+      if (!plan.raw.trim()) {
+        return console.log(`Плану ще немає — створи ${config.content.planFile}`)
+      }
+      console.log(plan.raw.trim())
+      const open = pendingTopics(plan)
+      console.log(`\nНезакритих тем: ${open.length} з ${plan.topics.length}`)
+      return
+    }
+
+    case 'generate': {
+      const count = flag('--count') ? Number(flag('--count')) : undefined
+      const brief = flag('--brief')
+      const commit = args.includes('--yes')
+
+      const result = await generateDrafts(config, { count, brief })
+      const drafts = result.drafts
+      if (!drafts.length) return console.log('Модель не повернула жодного варіанта.')
+      const generationId = await tryRecord('генерацію', () => recordGeneration(result))
+
+      // Slots are handed out in order, so queueing three drafts fills the next
+      // three free slots rather than stacking them on one.
+      const slots = commit ? nextSlots(drafts.length) : []
+      const queued: { index: number; file: string }[] = []
+
+      drafts.forEach((draft, index) => {
+        console.log(`\n[${index + 1}] ${draft.topic}  (${draft.text.length} символів)`)
+        console.log(`    ${draft.note}`)
+        console.log(draft.text)
+        for (const violation of draft.violations) console.log(`    ! ${violation.detail}`)
+
+        if (!commit) return
+        if (draft.violations.length) {
+          console.log('    пропущено: не проходить обмеження')
+          return
+        }
+        const at = slots[index]
+        const item = addItem(config, draft.text, at)
+        if (draft.planLine !== undefined) markTopicDone(config, draft.planLine)
+        queued.push({ index, file: item.file })
+        console.log(`    → черга: ${item.file} на ${at}`)
+      })
+
+      for (const entry of queued) {
+        await tryRecord('чернетку в черзі', () => markDraftQueued(generationId, entry.index, entry.file))
+      }
+      await closeDb()
+
+      if (!commit) console.log('\nПробний запуск. Щоб додати в чергу: generate --yes')
       return
     }
 

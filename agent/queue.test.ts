@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'nod
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { AgentConfig } from './config.ts'
+import { defaultConfig, type AgentConfig } from './config.ts'
 import { addItem, dueItems, listPublished, listQueue, settleItem } from './queue.ts'
 
 let root: string
@@ -17,9 +17,12 @@ beforeEach(() => {
       queueDir: join(root, 'queue'),
       publishedDir: join(root, 'published'),
       knowledgeDir: join(root, 'knowledge'),
+      planFile: join(root, 'plan.md'),
     },
     schedule: { slots: ['09:30'], maxPerDay: 2 },
     guardrails: { maxLength: 500, minLength: 40, bannedPhrases: [] },
+    voice: defaultConfig().voice,
+    generation: defaultConfig().generation,
     monitor: { keywords: [] },
   }
 })

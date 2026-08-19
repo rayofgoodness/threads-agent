@@ -11,8 +11,22 @@ import { createServer } from 'node:http'
 import { join } from 'node:path'
 import { ThreadsClient } from '../src/threads/index.ts'
 import type { AccountMetric, PostMetric, ReplyControl } from '../src/threads/types.ts'
-import { loadConfig } from '../agent/config.ts'
+import { loadConfig, saveVoice, type VoiceConfig } from '../agent/config.ts'
 import { collectSignals } from '../agent/monitor.ts'
+import { generateDrafts } from '../agent/generator.ts'
+import { markTopicDone, readPlan, writePlan } from '../agent/plan.ts'
+import { nextSlots } from '../agent/schedule.ts'
+import { addItem, listQueue } from '../agent/queue.ts'
+import { checkGuardrails } from '../agent/publisher.ts'
+import {
+  isDbEnabled,
+  listGenerations,
+  markDraftQueued,
+  metricsHistory,
+  recordGeneration,
+  recordMetrics,
+  tryRecord,
+} from '../db/index.ts'
 import { checkAuth, resolveBinding } from './auth.ts'
 import { createHandler, HttpError, Router, send } from './http.ts'
 import { serveStatic } from './static.ts'
@@ -29,6 +43,10 @@ if (!process.env.THREADS_ACCESS_TOKEN) {
 const secret = process.env.THREADS_AGENT_TOKEN
 const { host, port } = resolveBinding(process.env, secret)
 const client = ThreadsClient.fromEnv()
+// Boot-time config, used where nothing edits it (the monitor's keywords).
+// Routes that touch the voice, the plan or the queue call `loadConfig()` per
+// request instead — the dashboard writes those back, and a config captured
+// here would keep serving the old values until a restart.
 const config = loadConfig()
 const distRoot = join(process.cwd(), 'dist')
 
@@ -110,6 +128,87 @@ router.get('/api/signals', async ({ query }) =>
     all: query.get('all') === '1',
   }),
 )
+
+/** Voice: the tone-of-voice block of `agent.config.json`. */
+router.get('/api/voice', async () => loadConfig().voice)
+
+router.put('/api/voice', async ({ body }) => saveVoice((await body()) as unknown as VoiceConfig))
+
+/** Content plan: one markdown file, round-tripped as text. */
+router.get('/api/plan', async () => readPlan(loadConfig()))
+
+router.put('/api/plan', async ({ body }) => {
+  const payload = await body()
+  const raw = payload.raw
+  if (typeof raw !== 'string') throw new HttpError(400, '"raw" must be a string')
+  return writePlan(loadConfig(), raw)
+})
+
+/** The queue as the dashboard sees it — drafts, not published posts. */
+router.get('/api/queue', async () => listQueue(loadConfig()))
+
+router.post('/api/queue', async ({ body }) => {
+  const payload = await body()
+  const current = loadConfig()
+  const text = requireString(payload, 'text')
+  const at = optionalString(payload, 'publishAt') ?? nextSlots(current, 1)[0]
+  const item = addItem(current, text, at)
+
+  // Ticking the plan line and marking the draft queued are bookkeeping: a
+  // failure there must not undo an item that is already on disk.
+  const planLine = typeof payload.planLine === 'number' ? payload.planLine : undefined
+  if (planLine !== undefined) markTopicDone(current, planLine)
+  const generationId = typeof payload.generationId === 'number' ? payload.generationId : undefined
+  const position = typeof payload.position === 'number' ? payload.position : undefined
+  if (generationId !== undefined && position !== undefined) {
+    await tryRecord('чернетку в черзі', () => markDraftQueued(generationId, position, item.file))
+  }
+
+  return { ...item, violations: checkGuardrails(current, text) }
+})
+
+/**
+ * Drafting. Costs an Anthropic call, so it is a POST and never runs on load —
+ * and it writes nothing to the queue: the reviewer decides what is kept.
+ */
+router.post('/api/generate', async ({ body }) => {
+  const payload = await body()
+  const current = loadConfig()
+  const result = await generateDrafts(current, {
+    count: typeof payload.count === 'number' ? payload.count : undefined,
+    brief: optionalString(payload, 'brief'),
+  })
+  const id = await tryRecord('генерацію', () => recordGeneration(result))
+  return { ...result, id: id ?? null, slots: nextSlots(current, result.drafts.length) }
+})
+
+/** Generation history. Empty without a database — the feature is optional. */
+router.get('/api/generations', async ({ query }) =>
+  listGenerations(query.has('limit') ? Number(query.get('limit')) : undefined),
+)
+
+router.get('/api/db', async () => ({ enabled: isDbEnabled() }))
+
+/** Analytics: one row per reading, so the numbers can be compared over time. */
+router.get('/api/posts/:id/metrics', async ({ params }) => metricsHistory(params.id!))
+
+router.post('/api/posts/:id/metrics', async ({ params }) => {
+  const insights = await client.postInsights(params.id!)
+  // Threads reports a metric either as a single `total_value` or as a series;
+  // which one depends on the metric, so both are read.
+  const value = (name: string) => {
+    const metric = insights.find((candidate) => candidate.name === name)
+    return metric?.total_value?.value ?? metric?.values?.[0]?.value ?? null
+  }
+  const stored = await recordMetrics(params.id!, {
+    views: value('views'),
+    likes: value('likes'),
+    replies: value('replies'),
+    reposts: value('reposts'),
+    quotes: value('quotes'),
+  })
+  return { stored, insights }
+})
 
 /** Publishing and deleting are the only state-changing routes; both are explicit. */
 router.post('/api/posts', async ({ body }) => {

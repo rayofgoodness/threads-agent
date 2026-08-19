@@ -68,6 +68,10 @@ THREADS_ACCESS_TOKEN=
 THREADS_APP_ID=
 THREADS_APP_SECRET=
 THREADS_AGENT_TOKEN=$(openssl rand -base64 32)
+# Лише для генерації постів на цій машині; публікація черги його не потребує.
+ANTHROPIC_API_KEY=
+# Необовʼязково: історія генерацій і метрики. Без нього все працює так само.
+DATABASE_URL=
 EOF
   ENV_WAS_CREATED=1
 fi

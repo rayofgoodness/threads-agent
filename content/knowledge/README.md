@@ -13,5 +13,8 @@ Worth keeping here:
 - **`product/`** — what Casy actually does, pricing, what it deliberately does
   not do. Prevents the agent from promising features that do not exist.
 
-Nothing here is read automatically yet — this is the shape to fill before the
-drafting step is built.
+Every `.md` and `.txt` file here is read into the system prompt on each
+generation, `README.md` excluded and each file capped at 12k characters. With
+the directory empty the generator is told to avoid specifics — it will not
+invent a case study — so filling this in is what moves drafts from plausible to
+true.

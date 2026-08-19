@@ -27,6 +27,7 @@ export class Router {
 
   get = (path: string, handler: Handler) => this.add('GET', path, handler)
   post = (path: string, handler: Handler) => this.add('POST', path, handler)
+  put = (path: string, handler: Handler) => this.add('PUT', path, handler)
   delete = (path: string, handler: Handler) => this.add('DELETE', path, handler)
 
   match(method: string, pathname: string): { handler: Handler; params: Record<string, string> } | undefined {

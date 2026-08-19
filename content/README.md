@@ -10,6 +10,11 @@ hidden state.
 | `published/` | Where a file moves once it goes out, stamped with its post id and link. |
 | `knowledge/` | Source material the agent writes from — see `knowledge/README.md`.      |
 
+`plan.md` sits alongside them: the content plan, read by the generator on every
+run. A line matching `- [ ] тема` is an open topic and gets ticked to `- [x]`
+once a draft written from it reaches the queue. Everything else in the file is
+prose the model reads as context — direction for the month, what not to touch.
+
 A queue file is front matter plus the post body:
 
 ```markdown
@@ -25,4 +30,6 @@ The text of the post.
 with the reason and stays in `queue/` so it can be fixed and retried.
 
 Add items with `node scripts/agent.ts add "…"` rather than by hand — it picks
-the next free slot and runs the guardrails immediately.
+the next free slot and runs the guardrails immediately. `node scripts/agent.ts
+generate` writes them from the plan and the voice config; without `--yes` it
+only prints.

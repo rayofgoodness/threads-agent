@@ -67,7 +67,16 @@ THREADS_ACCESS_TOKEN=...
 THREADS_APP_ID=...
 THREADS_APP_SECRET=...
 THREADS_AGENT_TOKEN=...     # openssl rand -base64 32
+ANTHROPIC_API_KEY=...       # тільки якщо генерувати пости на самій малині
+DATABASE_URL=...            # необовʼязково; історія генерацій і метрик
 ```
+
+`ANTHROPIC_API_KEY` потрібен лише для `/api/generate` і `agent.ts generate`.
+Публікація черги без нього працює, тож якщо чернетки пишуться на ноуті й
+доїжджають у `content/queue` через git, ключ на малині не потрібен.
+
+Postgres із `docker-compose.yml` на малину не їде за замовчуванням — без
+`DATABASE_URL` сервер просто не веде історію.
 
 ```sh
 sudo chown threads:threads /opt/threads-agent/.env

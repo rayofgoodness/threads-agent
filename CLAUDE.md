@@ -28,8 +28,9 @@ Current state and open tasks: @PROGRESS.md
 - `npm run server` — JSON API over the Threads client on port 8788 (`PORT` overrides).
   It loads `.env` itself via `process.loadEnvFile`, so no `source` needed.
 - `node scripts/agent.ts <command>` — content queue and scheduling
-  (`list`, `add`, `check`, `due`, `run`, `published`, `slots`). `run` is a dry
-  run; only `run --yes` publishes.
+  (`list`, `add`, `check`, `due`, `run`, `published`, `slots`, `plan`,
+  `generate`). `run` is a dry run; only `run --yes` publishes, and `generate`
+  only queues with `--yes`.
 - `node scripts/threads.ts <command>` — terminal access to the Threads client
   (`whoami`, `token`, `limits`, `posts`, `post`, `delete`, `insights`, `replies`).
   Needs `source .env` first. Node type-strips the `.ts` directly, no build step —
@@ -39,10 +40,17 @@ Current state and open tasks: @PROGRESS.md
   (`constructor(readonly x: number)`), `enum` and `namespace` crash at load with
   `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` — assign fields in the body instead.
 
+- `npm run db:up` / `npm run db:migrate` / `npm run db:down` — the optional
+  Postgres for generation history. `docker-compose.yml` binds it to
+  `127.0.0.1:${POSTGRES_PORT:-55432}`, deliberately not 5432, so a local
+  Postgres keeps working.
+
 - `npm test` — Vitest (`npm run test:watch` to iterate). Tests sit next to the
-  code as `*.test.ts` and cover the queue, guardrails, monitor and router. They
-  never touch the network: the Threads client takes an injected `fetchImpl`, and
-  the agent modules take an injected client, so nothing reaches the real account.
+  code as `*.test.ts` and cover the queue, guardrails, monitor, router, plan,
+  generator and the database layer. They never touch the network: the Threads
+  client takes an injected `fetchImpl`, the agent modules take an injected
+  client, and the generator takes an injected `createMessage`, so nothing
+  reaches the real account, Anthropic or Postgres.
 
 Verification = `npm test && npm run type-check && npm run lint`. CI
 (`.github/workflows/ci.yml`) runs the same on Node 22 and 24, plus
@@ -62,7 +70,9 @@ Node: `^22.18.0 || >=24.12.0` (enforced via `engines`).
 
 ## Threads API
 
-`.env` holds `THREADS_ACCESS_TOKEN`, `THREADS_APP_ID`, `THREADS_APP_SECRET`.
+`.env` holds `THREADS_ACCESS_TOKEN`, `THREADS_APP_ID`, `THREADS_APP_SECRET`,
+and — for drafting and history — `ANTHROPIC_API_KEY` and `DATABASE_URL`.
+`.env.example` lists them all.
 It is gitignored and **not** loaded automatically — run `source .env` in each new
 shell before any command that talks to the Threads API. Never paste a token or
 app secret into chat, a commit, or a file other than `.env`.
@@ -118,6 +128,45 @@ item stays queued.
 Content is deliberately files, not a database — drafts, edits and publish
 history all show up in `git diff`. `content/README.md` documents the format.
 Publishing defaults to dry: `runDue` does nothing without `commit: true`.
+
+### Drafting
+
+`generator.ts` asks Claude for drafts and writes nothing: the caller decides
+what reaches the queue. Its prompt has two halves, split so the stable one can
+be cached — `buildSystemPrompt` (the `voice` block plus everything under
+`content/knowledge/`, read by `knowledge.ts`) and `buildUserPrompt` (the plan,
+the open topics, recently published posts, the brief).
+
+The model is pinned to `claude-opus-5` with structured output
+(`output_config.format`, `json_schema`), so the response parses without
+recovery code. `generation.effort` in the config controls depth. The API key
+lives only in `.env`; `defaultCreateMessage` builds the client lazily, so
+importing the module without a key is harmless, and tests inject
+`createMessage` instead.
+
+Guardrails run on the result, but a violating draft is returned with its
+violations rather than dropped — the reviewer sees what the model produced.
+
+`plan.ts` owns `content/plan.md`. A line matching `- [ ] текст` is an open
+topic; everything else is prose the model still reads. `markTopicDone` ticks
+by line index, never by text, because two topics can legitimately read the same.
+
+### The database
+
+`db/` is optional, and every function in it is a no-op without `DATABASE_URL` —
+`recordGeneration` then returns `undefined`, which `markDraftQueued` accepts, so
+callers need no branching. It stores what git cannot: `generations` (what was
+asked, what it cost), `drafts` (each variant and whether it was queued) and
+`post_metrics` (one row per reading, so a post's curve survives). Content stays
+in `content/`; do not move it here.
+
+Writes go through `tryRecord`, which reports a failure and returns `undefined`
+instead of raising: a stopped container must not lose a generation that already
+cost an Anthropic call, nor refuse a draft that is already on disk.
+
+`db/schema.sql` is mounted as a compose init script, which only runs on an empty
+volume — `npm run db:migrate` is what applies it to a database that already
+exists. Every statement is `IF NOT EXISTS`, so it is safe to re-run.
 
 ### Monitoring
 
@@ -183,8 +232,14 @@ loopback address without the token, because `/api` can publish and delete.
 `server/` puts the client behind same-origin JSON routes so the token stays out
 of the browser: `http.ts` is a small router plus the error mapping (Threads codes
 → HTTP status: permission → 403, missing object → 404, quota → 429, anything
-else → 502), `index.ts` declares the routes. `vite.config.ts` proxies `/api` to
-port 8788 in development, so the Vue app calls `/api/...` with no CORS involved.
+else → 502), `index.ts` declares the routes.
+
+Routes that touch editable state (`/api/voice`, `/api/plan`, `/api/queue`,
+`/api/generate`) call `loadConfig()` per request — the dashboard writes the
+voice and the plan back to disk, and the config captured at boot would keep
+serving the old values. `/api/generate` costs an Anthropic call, so it is a
+POST and never runs on load. `vite.config.ts` proxies `/api` to port 8788 in
+development, so the Vue app calls `/api/...` with no CORS involved.
 
 ### The Vue app
 

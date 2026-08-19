@@ -5,10 +5,14 @@ import { useResource } from './composables/useResource.ts'
 import AccessGate from './components/AccessGate.vue'
 import AccountBar from './components/AccountBar.vue'
 import ComposerCard from './components/ComposerCard.vue'
+import GeneratorCard from './components/GeneratorCard.vue'
 import InsightsCard from './components/InsightsCard.vue'
+import PlanCard from './components/PlanCard.vue'
 import PostCard from './components/PostCard.vue'
+import QueueCard from './components/QueueCard.vue'
 import SignalsCard from './components/SignalsCard.vue'
 import StatusLine from './components/StatusLine.vue'
+import VoiceCard from './components/VoiceCard.vue'
 
 const feed = useResource(() => api.posts(25))
 const token = useResource(api.token)
@@ -37,6 +41,16 @@ function onDeleted(id: string) {
 function onPublished() {
   window.setTimeout(() => void feed.refresh(), FEED_SETTLE_MS)
 }
+
+/** The queue card owns its own data; generating into it has to poke it. */
+const queueCard = ref<InstanceType<typeof QueueCard>>()
+const planCard = ref<InstanceType<typeof PlanCard>>()
+
+function onQueued() {
+  void queueCard.value?.refresh()
+  // A queued draft may have ticked a topic off the plan.
+  void planCard.value?.refresh()
+}
 </script>
 
 <template>
@@ -49,6 +63,8 @@ function onPublished() {
       <main>
       <div class="column">
         <ComposerCard @published="onPublished" />
+
+        <GeneratorCard @queued="onQueued" />
 
         <section aria-labelledby="feed-heading">
           <div class="feed-head">
@@ -77,6 +93,9 @@ function onPublished() {
       </div>
 
         <aside>
+          <QueueCard ref="queueCard" />
+          <PlanCard ref="planCard" />
+          <VoiceCard />
           <InsightsCard />
           <SignalsCard />
         </aside>
@@ -107,9 +126,9 @@ aside {
   align-content: start;
 }
 
-@media (min-width: 60rem) {
+@media (min-width: 64rem) {
   main {
-    grid-template-columns: minmax(0, 1fr) 18rem;
+    grid-template-columns: minmax(0, 1fr) 22rem;
     align-items: start;
   }
 }

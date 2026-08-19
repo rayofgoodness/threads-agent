@@ -7,19 +7,24 @@ Publishing agent for the [Casy](https://casy.beauty) Threads account
 through the official Threads API, and reports what comes back — replies,
 metrics, keyword hits.
 
+Drafts are written by Claude from a tone-of-voice config and a content plan,
+then reviewed before anything is queued.
+
 Content lives as markdown under `content/`, so a draft, an edit and the record
-of what went out are all ordinary diffs. There is no database.
+of what went out are all ordinary diffs. A Postgres database is optional and
+holds only what git is bad at: generation history and post metrics over time.
 
 ## Layout
 
 | Path           | What it is                                                                     |
 | -------------- | ------------------------------------------------------------------------------ |
 | `src/threads/` | Typed Threads API client. Server-side only — it carries the access token.      |
-| `agent/`       | Queue, schedule, guardrails, inbound monitoring.                               |
+| `agent/`       | Queue, schedule, guardrails, drafting, inbound monitoring.                     |
 | `server/`      | JSON API over the client, so the browser never sees the token.                 |
 | `src/`         | Vue 3 dashboard: composer, feed, metrics, inbound signals.                     |
 | `scripts/`     | Two CLIs — `threads.ts` for direct API calls, `agent.ts` for the content loop. |
-| `content/`     | Drafts, the publishing queue and published history.                            |
+| `content/`     | Drafts, the queue, published history, the plan and the knowledge base.         |
+| `db/`          | Optional Postgres: generation history and post metrics. Schema and migration.  |
 | `docs/`        | Legal pages for Meta App Review, served by GitHub Pages.                       |
 
 ## Setup
@@ -37,7 +42,11 @@ Create `.env` in the project root:
 THREADS_ACCESS_TOKEN=...
 THREADS_APP_ID=...        # the Threads app ID, not the Meta app ID
 THREADS_APP_SECRET=...
+ANTHROPIC_API_KEY=...     # drafting; everything else works without it
+DATABASE_URL=...          # optional, see «Generation history» below
 ```
+
+`.env.example` carries the full list with defaults.
 
 The token comes from the App Dashboard → Threads PR Manager → Use Case
 "Access the Threads API" → Settings → **User Token Generator**. That issues a
@@ -87,6 +96,44 @@ node scripts/agent.ts published
 node scripts/agent.ts watch [--all]      # inbound replies, mentions, keywords
 ```
 
+### Drafting
+
+```sh
+node scripts/agent.ts plan                       # the plan, and what is open in it
+node scripts/agent.ts generate                   # drafts, printed, nothing queued
+node scripts/agent.ts generate --count 5 --brief "про ціни"
+node scripts/agent.ts generate --yes             # queue what passes the guardrails
+```
+
+The model is given three things: the `voice` block of `agent.config.json` (who
+is speaking, to whom, the tone, the rules, what never appears), everything under
+`content/knowledge/`, and `content/plan.md`. A plan line reading `- [ ] тема` is
+an open topic; the agent ticks it to `- [x]` once a draft from it reaches the
+queue. Prose around the topics is context the model still reads.
+
+Nothing is published by generating — `--yes` only queues, and the queue is still
+subject to the slots, the daily cap and the guardrails. The same flow is in the
+dashboard, where each draft stays editable before it is queued.
+
+Both the voice and the plan are editable from the dashboard; the voice is
+written back into `agent.config.json`, so it stays a diff like everything else.
+
+### Generation history
+
+Optional. Without `DATABASE_URL` every database call is a no-op and drafting
+works unchanged — the history simply is not kept.
+
+```sh
+docker compose up -d      # Postgres on 127.0.0.1:55432
+npm run db:migrate        # apply db/schema.sql to an existing volume
+```
+
+The host port is deliberately not 5432 so a local Postgres keeps working;
+override it with `POSTGRES_PORT`. Three tables: `generations` (what was asked
+and what it cost), `drafts` (each variant and whether it was queued) and
+`post_metrics` (one row per reading, so a post's curve is visible rather than
+just its latest number). Content itself is never stored there.
+
 `run` is dry unless you pass `--yes`. Slots, the daily cap, length bounds,
 banned phrases and watched keywords all come from `agent.config.json`.
 
@@ -132,13 +179,14 @@ Findings from working against the live account, not guesses:
 ## Verification
 
 ```sh
-npm test          # 46 tests, no network
+npm test          # 80 tests, no network
 npm run type-check
 npm run lint
 ```
 
-Tests inject a `fetchImpl` into the client and a client into the agent modules,
-so nothing can reach the real account. CI runs the same on Node 22 and 24, plus
+Tests inject a `fetchImpl` into the client, a client into the agent modules and
+a fake `createMessage` into the generator, so nothing reaches the real account,
+Anthropic or Postgres. CI runs the same on Node 22 and 24, plus
 a smoke run of both CLIs — type stripping fails at load, never at build.
 
 ## Legal pages

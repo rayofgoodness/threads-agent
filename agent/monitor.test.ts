@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AgentConfig } from './config.ts'
+import { defaultConfig, type AgentConfig } from './config.ts'
 import { collectSignals } from './monitor.ts'
 import { ThreadsApiError, type ThreadsClient } from '../src/threads/index.ts'
 
@@ -41,9 +41,16 @@ beforeEach(() => {
   config = {
     account: 'calendarsync',
     timezone: 'Europe/Kyiv',
-    content: { queueDir: join(root, 'q'), publishedDir: join(root, 'p'), knowledgeDir: join(root, 'k') },
+    content: {
+      queueDir: join(root, 'q'),
+      publishedDir: join(root, 'p'),
+      knowledgeDir: join(root, 'k'),
+      planFile: join(root, 'plan.md'),
+    },
     schedule: { slots: [], maxPerDay: 2 },
     guardrails: { maxLength: 500, minLength: 40, bannedPhrases: [] },
+    voice: defaultConfig().voice,
+    generation: defaultConfig().generation,
     monitor: { keywords: ['casy'] },
   }
 })

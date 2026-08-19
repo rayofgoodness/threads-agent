@@ -30,6 +30,66 @@ export interface MonitorReport {
   checkedAt: string
 }
 
+/** Tone of voice — the `voice` block of `agent.config.json`, editable here. */
+export interface Voice {
+  persona: string
+  audience: string
+  language: string
+  tone: string[]
+  rules: string[]
+  avoid: string[]
+  emoji: 'none' | 'sparingly' | 'free'
+  samples: string[]
+}
+
+export interface PlanTopic {
+  line: number
+  text: string
+  done: boolean
+}
+
+export interface ContentPlan {
+  raw: string
+  topics: PlanTopic[]
+}
+
+export interface GuardrailViolation {
+  rule: 'maxLength' | 'minLength' | 'bannedPhrase' | 'empty'
+  detail: string
+}
+
+export interface QueueItem {
+  file: string
+  path: string
+  status: 'queued' | 'published' | 'failed'
+  publishAt?: string
+  publishedAt?: string
+  postId?: string
+  permalink?: string
+  note?: string
+  text: string
+  violations?: GuardrailViolation[]
+}
+
+export interface Draft {
+  topic: string
+  text: string
+  note: string
+  planLine?: number
+  violations: GuardrailViolation[]
+}
+
+export interface Generation {
+  /** Null when no database is configured — drafting works without one. */
+  id: number | null
+  model: string
+  brief?: string
+  drafts: Draft[]
+  usage: { input: number; output: number; cached: number }
+  /** Suggested slot per draft, in order, so the UI can show where it would go. */
+  slots: string[]
+}
+
 export interface TokenStatus {
   valid: boolean
   expiresAt: string | null
@@ -103,5 +163,25 @@ export const api = {
   publish: (text: string) =>
     request<ThreadsPost>('/posts', { method: 'POST', body: JSON.stringify({ text }) }),
   signals: (all = false) => request<MonitorReport>(`/signals${all ? '?all=1' : ''}`),
+
+  voice: () => request<Voice>('/voice'),
+  saveVoice: (voice: Voice) => request<Voice>('/voice', { method: 'PUT', body: JSON.stringify(voice) }),
+
+  plan: () => request<ContentPlan>('/plan'),
+  savePlan: (raw: string) =>
+    request<ContentPlan>('/plan', { method: 'PUT', body: JSON.stringify({ raw }) }),
+
+  queue: () => request<QueueItem[]>('/queue'),
+  enqueue: (payload: {
+    text: string
+    publishAt?: string
+    planLine?: number
+    generationId?: number
+    position?: number
+  }) => request<QueueItem>('/queue', { method: 'POST', body: JSON.stringify(payload) }),
+
+  /** Costs an Anthropic call and can take a while; nothing is queued by it. */
+  generate: (payload: { brief?: string; count?: number }) =>
+    request<Generation>('/generate', { method: 'POST', body: JSON.stringify(payload) }),
   remove: (id: string) => request<{ deleted: boolean }>(`/posts/${id}`, { method: 'DELETE' }),
 }
