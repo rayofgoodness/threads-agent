@@ -6,6 +6,10 @@
     // Extra safety for array and object lookups, but may have false positives.
     "noUncheckedIndexedAccess": true,
 
+    // Node runs scripts/*.ts directly, and its ESM resolver needs the extension
+    // spelled out in every import.
+    "allowImportingTsExtensions": true,
+
     // Path mapping for cleaner imports.
     "paths": {
       "@/*": ["./src/*"]

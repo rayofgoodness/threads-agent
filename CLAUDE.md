@@ -25,6 +25,12 @@ Current state and open tasks: @PROGRESS.md
 - `npm run lint` — `eslint . --fix` (config in `eslint.config.ts`; `docs/` is ignored)
 - `npm run format` — Prettier over `src/` (no semicolons, single quotes, width 100)
 
+- `node scripts/threads.ts <command>` — terminal access to the Threads client
+  (`whoami`, `token`, `limits`, `posts`, `post`, `delete`, `insights`, `replies`).
+  Needs `source .env` first. Node type-strips the `.ts` directly, no build step —
+  which is why imports under `src/threads/` and `scripts/` carry explicit `.ts`
+  extensions and both tsconfigs set `allowImportingTsExtensions`.
+
 There is no test setup. Verification = `npm run type-check && npm run lint`.
 
 Node: `^22.18.0 || >=24.12.0` (enforced via `engines`).
@@ -73,6 +79,15 @@ authorization time, not the token's:
 ```sh
 curl -s "https://graph.threads.net/debug_token?input_token=$T&access_token=$T"
 ```
+
+### The client
+
+`src/threads/` wraps the API: `ThreadsClient` (calls), `errors.ts`
+(`ThreadsApiError`, which classifies failures — branch on `code`, not on HTTP
+status), `types.ts` (response shapes). It is **server-side only**: it holds the
+token and Threads sends no CORS headers, so importing it into the Vue bundle
+would leak the secret and fail at runtime. Reach it from `scripts/` or a backend
+route, never from a component.
 
 ### Permissions
 
