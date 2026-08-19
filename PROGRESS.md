@@ -50,6 +50,15 @@ flow.
 чужих Threads-акаунтів: окрема верифікація ~тиждень плюс App Review на кожен
 дозвіл.
 
+### Перенесення legal-сторінок на `threads.quarters.casa`
+
+Чекає на DNS-запис у Cloudflare: `threads` як CNAME на `rayofgoodness.github.io`,
+**DNS only**, без проксі. Порядок кроків — у `deploy/README.md`; він не
+довільний: GitHub вмикає 301 на новий домен одразу, тож домен, заданий раніше
+за DNS, кладе privacy, data-deletion і callback — саме ті URL, що в Meta.
+Після перемикання треба оновити поля в застосунку Meta, додаючи новий redirect
+поряд зі старим, а не замість.
+
 ### Дрібніше
 
 - Черга не публікується сама — потрібен cron або launchd на `agent.ts run --yes`

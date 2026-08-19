@@ -131,6 +131,9 @@ the name, and only `THREADS_AGENT_TOKEN` stands in the way.
 www.quarters.casa`, or drop that block from the config.
 - **The apex is proxied**, so Cloudflare's own TLS certificate covers it. Nothing
   on the Pi needs a certificate.
+- **The legal pages stay on GitHub Pages, not on the Pi.** Meta needs the privacy
+  and data-deletion URLs reachable at all times; a Pi at home is not. See the
+  runbook below for putting them on a subdomain without taking them down.
 - **The OAuth redirect URI still points at GitHub Pages**
   (`https://rayofgoodness.github.io/threads-agent/callback.html`). It can move to
   `https://quarters.casa/callback.html` later, but only together with the
@@ -141,3 +144,54 @@ threads-agent`. The queue lives in `content/`, which is not touched by a pull
   unless you commit queue files.
 - **The Threads token expires every 60 days.** Refresh it before then and
   restart the service; the agent does not renew it on its own yet.
+
+## Runbook: moving the legal pages to `threads.quarters.casa`
+
+They stay on GitHub Pages; only the hostname changes. **The order matters.**
+GitHub starts serving a `301` to the custom domain the moment it is configured,
+without waiting for DNS — so a domain set before the record exists takes the
+privacy policy, the deletion instructions and the OAuth callback offline, which
+are exactly the URLs Meta has on file.
+
+1. **DNS first.** In Cloudflare, add `threads` as a `CNAME` to
+   `rayofgoodness.github.io`, set to **DNS only** (grey cloud). Proxying it now
+   blocks the certificate check GitHub runs. Confirm it resolves:
+
+   ```sh
+   dig +short threads.quarters.casa
+   ```
+
+2. **Then the domain.** Either commit `docs/CNAME` containing
+   `threads.quarters.casa`, or:
+
+   ```sh
+   gh api -X PUT repos/rayofgoodness/threads-agent/pages -f cname=threads.quarters.casa
+   ```
+
+3. **Wait for the certificate** — up to about fifteen minutes. Until it is
+   issued, https fails while http works:
+
+   ```sh
+   gh api repos/rayofgoodness/threads-agent/pages --jq '{cname, status, https_enforced}'
+   curl -sI https://threads.quarters.casa/privacy.html | head -1
+   ```
+
+4. **Update the Meta app** — App Dashboard → Threads PR Manager → Use Case
+   "Access the Threads API" → Settings:
+   - Redirect Callback URLs → `https://threads.quarters.casa/callback.html`.
+     Add it _beside_ the GitHub Pages one rather than replacing it, so an
+     authorization in flight does not break; remove the old entry afterwards.
+   - Privacy Policy URL, Data Deletion URL and Terms of Service URL in App
+     Settings → Basic, likewise pointed at the new host.
+
+5. **Verify** the whole set answers `200` over https:
+
+   ```sh
+   for page in "" privacy.html data-deletion.html terms.html callback.html; do
+     curl -s -o /dev/null -w "$page %{http_code}\n" "https://threads.quarters.casa/$page"
+   done
+   ```
+
+To undo at any point: clear the domain
+(`gh api -X PUT .../pages -f cname=""`) and delete `docs/CNAME`. The old
+`rayofgoodness.github.io/threads-agent/` URLs come back within a minute.
