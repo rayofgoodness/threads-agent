@@ -39,6 +39,19 @@ and neither is optional once the host is on the internet:
 
 ## Install
 
+One command does all of it — user, clone, dependencies, build, systemd units —
+and is safe to re-run after a `git pull`:
+
+```sh
+sudo bash deploy/install.sh
+```
+
+On the first run it writes an `.env` skeleton with a generated
+`THREADS_AGENT_TOKEN` and stops, so the services never start without the Threads
+credentials. Fill it in, then enable them.
+
+The manual equivalent, if you would rather see each step:
+
 ```sh
 sudo useradd --system --create-home --home-dir /opt/threads-agent threads
 sudo -u threads git clone https://github.com/rayofgoodness/threads-agent.git /opt/threads-agent

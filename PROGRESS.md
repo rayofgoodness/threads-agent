@@ -50,14 +50,20 @@ flow.
 чужих Threads-акаунтів: окрема верифікація ~тиждень плюс App Review на кожен
 дозвіл.
 
-### Перенесення legal-сторінок на `threads.quarters.casa`
+### Розгортання
 
-Чекає на DNS-запис у Cloudflare: `threads` як CNAME на `rayofgoodness.github.io`,
-**DNS only**, без проксі. Порядок кроків — у `deploy/README.md`; він не
-довільний: GitHub вмикає 301 на новий домен одразу, тож домен, заданий раніше
-за DNS, кладе privacy, data-deletion і callback — саме ті URL, що в Meta.
-Після перемикання треба оновити поля в застосунку Meta, додаючи новий redirect
-поряд зі старим, а не замість.
+Рішення: **на Pi їде тільки застосунок**, legal-сторінки лишаються на GitHub
+Pages за адресою `rayofgoodness.github.io/threads-agent/`. Meta вимагає їх
+доступними постійно, а домашній Pi вимикається — тоді privacy й data-deletion
+віддавали б 502.
+
+Дашборд буде на `https://quarters.casa` через Cloudflare Tunnel. Встановлення —
+`sudo bash deploy/install.sh` на самій малині, решта в `deploy/README.md`.
+
+Перенесення legal на піддомен описане runbook'ом у `deploy/README.md`, але
+відкладене. Порядок там не довільний: GitHub вмикає 301 на власний домен
+одразу, тож домен, заданий раніше за DNS-запис, кладе саме ті URL, що
+зареєстровані в Meta. Перевірено на практиці 19 серпня.
 
 ### Дрібніше
 
