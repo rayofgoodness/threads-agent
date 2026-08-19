@@ -37,12 +37,53 @@ Node: `^22.18.0 || >=24.12.0` (enforced via `engines`).
 - Conventional Commits (`feat:`, `fix:`, `docs:`), committed straight to `master`.
   No feature branches, no PRs.
 
-## Threads API secrets
+## Threads API
 
 `.env` holds `THREADS_ACCESS_TOKEN`, `THREADS_APP_ID`, `THREADS_APP_SECRET`.
 It is gitignored and **not** loaded automatically — run `source .env` in each new
 shell before any command that talks to the Threads API. Never paste a token or
 app secret into chat, a commit, or a file other than `.env`.
+
+`THREADS_APP_ID` is the **Threads** app ID (1860340038261236), which is not the
+Meta app ID (1794866701670684) shown in the app list. Both the OAuth code
+exchange and `th_exchange_token` need the Threads one.
+
+Account: `@calendarsync`, user id `28412520845024805`. API host is
+`graph.threads.net`; pass the token as `Authorization: Bearer`, not in the query
+string.
+
+### Regenerating the token
+
+Do not re-run the OAuth authorize URL — it returns a bare `error_code: 1`, and a
+code obtained that way carries whatever permissions existed when the account
+first authorized, so newly added ones never appear. Use instead:
+App Dashboard → Threads PR Manager → Use Case «Access the Threads API» →
+Settings → **User Token Generator** → Generate Access Token for `calendarsync`.
+That issues a token matching the app's current permission set, but it expires in
+~90 minutes — exchange it for a 60-day one:
+
+```sh
+curl -s "https://graph.threads.net/access_token?grant_type=th_exchange_token&client_secret=$THREADS_APP_SECRET&access_token=$SHORT_LIVED"
+```
+
+Verify what a token actually carries before trusting it — `debug_token` is the
+only reliable check, and note that its `issued_at` is the account's original
+authorization time, not the token's:
+
+```sh
+curl -s "https://graph.threads.net/debug_token?input_token=$T&access_token=$T"
+```
+
+### Permissions
+
+The current token carries all 11 permissions the app has. `DELETE /v1.0/{id}`
+needs `threads_delete`; without it the API answers `code 10: Application does
+not have permission for this action` **after** the post is already public, and
+it then has to be removed by hand. Check scopes before any publish test.
+
+Publishing is two calls: `POST /me/threads` (returns a creation id) then
+`POST /me/threads_publish` with `creation_id`. No delay is needed between them
+for `media_type=TEXT`. Limits: 250 posts and 100 deletions per 24 hours.
 
 ## Deploying the legal pages
 
