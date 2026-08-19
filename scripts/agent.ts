@@ -10,6 +10,7 @@
 import { loadConfig } from '../agent/config.ts'
 import { addItem, listPublished, listQueue, dueItems } from '../agent/queue.ts'
 import { checkGuardrails, publishedToday, runDue } from '../agent/publisher.ts'
+import { collectSignals } from '../agent/monitor.ts'
 
 const [command = 'help', ...args] = process.argv.slice(2)
 const config = loadConfig()
@@ -23,6 +24,7 @@ Commands:
   run [--yes]             publish everything due; without --yes it only reports
   published               what has already gone out
   slots                   the next few configured publishing slots
+  watch [--all]           inbound signals: replies, mentions, watched keywords
 `
 
 /** Next occurrence of each configured slot, in the account's timezone. */
@@ -111,6 +113,29 @@ async function main() {
       if (!items.length) return console.log('Ще нічого не опубліковано.')
       for (const item of items) {
         console.log(`${item.publishedAt ?? '?'}  ${item.postId ?? '?'}  ${item.permalink ?? ''}`)
+      }
+      return
+    }
+
+    case 'watch': {
+      const report = await collectSignals(config, {
+        keywords: config.monitor.keywords,
+        all: args.includes('--all'),
+      })
+
+      if (!report.signals.length) {
+        console.log(args.includes('--all') ? 'Сигналів немає.' : 'Нових сигналів немає.')
+      }
+      for (const signal of report.signals) {
+        const who = signal.username ? `@${signal.username}` : 'невідомо'
+        const tag = signal.matched ? `${signal.kind}:${signal.matched}` : signal.kind
+        console.log(`[${tag}] ${who}  ${signal.timestamp ?? ''}`)
+        console.log(`    ${signal.text.slice(0, 100).replace(/\n/g, ' ')}`)
+        if (signal.permalink) console.log(`    ${signal.permalink}`)
+      }
+
+      for (const gap of report.unavailable) {
+        console.log(`недоступно (${gap.source}): ${gap.reason}`)
       }
       return
     }

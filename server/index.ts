@@ -10,6 +10,8 @@
 import { createServer } from 'node:http'
 import { ThreadsClient } from '../src/threads/index.ts'
 import type { AccountMetric, PostMetric, ReplyControl } from '../src/threads/types.ts'
+import { loadConfig } from '../agent/config.ts'
+import { collectSignals } from '../agent/monitor.ts'
 import { createHandler, HttpError, Router } from './http.ts'
 
 // `.env` is not exported into the shell automatically; load it if the token is absent.
@@ -23,6 +25,7 @@ if (!process.env.THREADS_ACCESS_TOKEN) {
 
 const PORT = Number(process.env.PORT ?? 8787)
 const client = ThreadsClient.fromEnv()
+const config = loadConfig()
 
 function requireString(body: Record<string, unknown>, key: string): string {
   const value = body[key]
@@ -89,6 +92,18 @@ router.get('/api/insights', async ({ query }) =>
 
 router.get('/api/replies', async ({ query }) =>
   client.listAllReplies({ limit: query.has('limit') ? Number(query.get('limit')) : undefined }),
+)
+
+/**
+ * Inbound signals. Reads replies across recent posts, so it costs one API call
+ * per post — the UI asks for it on demand rather than on load.
+ */
+router.get('/api/signals', async ({ query }) =>
+  collectSignals(config, {
+    client,
+    keywords: config.monitor.keywords,
+    all: query.get('all') === '1',
+  }),
 )
 
 /** Publishing and deleting are the only state-changing routes; both are explicit. */

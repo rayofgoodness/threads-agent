@@ -7,12 +7,28 @@
     "knowledgeDir": "content/knowledge"
   },
   "schedule": {
-    "slots": ["09:30", "18:00"],
+    "slots": [
+      "09:30",
+      "18:00"
+    ],
     "maxPerDay": 2
   },
   "guardrails": {
     "maxLength": 500,
     "minLength": 40,
-    "bannedPhrases": ["Дізнайтеся більше за посиланням", "Не пропустіть"]
+    "bannedPhrases": [
+      "Дізнайтеся більше за посиланням",
+      "Не пропустіть"
+    ]
+  },
+  "monitor": {
+    "_comment": "Одне слово на термін — Threads не шукає за фразами",
+    "keywords": [
+      "casy",
+      "запис",
+      "салон",
+      "манікюр",
+      "бʼюті"
+    ]
   }
 }

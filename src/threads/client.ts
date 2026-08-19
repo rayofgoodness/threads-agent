@@ -247,6 +247,41 @@ export class ThreadsClient {
     return result.success === true
   }
 
+  // ─── discovery ────────────────────────────────────────────────────────────
+
+  /**
+   * Keyword search across Threads. Needs `threads_keyword_search`.
+   *
+   * Two limits worth knowing before relying on it: the query is a single
+   * keyword (multi-word phrases match nothing, they do not fall back to OR),
+   * and at the app's default access level results are restricted to the
+   * account's own content — seeing other people's posts needs Advanced Access.
+   */
+  keywordSearch(
+    query: string,
+    options: { type?: 'TOP' | 'RECENT'; fields?: string; limit?: number } = {},
+  ) {
+    return this.request<Paged<ThreadsPost>>('GET', '/keyword_search', {
+      q: query,
+      search_type: options.type ?? 'RECENT',
+      fields: options.fields ?? DEFAULT_POST_FIELDS + ',username',
+      limit: options.limit,
+    })
+  }
+
+  /**
+   * Posts that mention this account. Needs `threads_manage_mentions` *and* an
+   * app access level above the default — otherwise it answers `code 10`
+   * regardless of the token's scopes.
+   */
+  listMentions(options: ListOptions = {}) {
+    return this.request<Paged<ThreadsPost>>('GET', `/${this.userId}/mentions`, {
+      fields: options.fields ?? DEFAULT_POST_FIELDS + ',username',
+      limit: options.limit,
+      after: options.after,
+    })
+  }
+
   // ─── insights ─────────────────────────────────────────────────────────────
 
   async accountInsights(

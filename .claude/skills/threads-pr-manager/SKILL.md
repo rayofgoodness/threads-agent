@@ -72,6 +72,17 @@ node scripts/threads.ts insights <postId>
 node scripts/threads.ts replies <postId>
 ```
 
+## Watching for inbound
+
+```sh
+node scripts/agent.ts watch          # only what has not been reported before
+node scripts/agent.ts watch --all    # everything, ignoring the seen-list
+```
+
+Terms come from `monitor.keywords` in `agent.config.json` and must be single
+words. Mentions currently report as unavailable — that is the app's access
+level, not a bug, and the rest of the report is still valid.
+
 ## Deleting
 
 Needs `threads_delete` in the token. Ask before removing anything that was not

@@ -6,6 +6,7 @@ import AccountBar from './components/AccountBar.vue'
 import ComposerCard from './components/ComposerCard.vue'
 import InsightsCard from './components/InsightsCard.vue'
 import PostCard from './components/PostCard.vue'
+import SignalsCard from './components/SignalsCard.vue'
 import StatusLine from './components/StatusLine.vue'
 
 const feed = useResource(() => api.posts(25))
@@ -71,6 +72,7 @@ function onPublished() {
 
       <aside>
         <InsightsCard />
+        <SignalsCard />
       </aside>
     </main>
   </div>
@@ -90,6 +92,12 @@ main {
   gap: 1.25rem;
   /* Sidebar drops under the column when there is no room for both. */
   grid-template-columns: minmax(0, 1fr);
+}
+
+aside {
+  display: grid;
+  gap: 1.25rem;
+  align-content: start;
 }
 
 @media (min-width: 60rem) {

@@ -6,6 +6,8 @@ export interface AgentConfig {
   content: { queueDir: string; publishedDir: string; knowledgeDir: string }
   schedule: { slots: string[]; maxPerDay: number }
   guardrails: { maxLength: number; minLength: number; bannedPhrases: string[] }
+  /** Single-word terms to watch. Threads matches no multi-word phrases. */
+  monitor: { keywords: string[] }
 }
 
 const DEFAULTS: AgentConfig = {
@@ -18,6 +20,7 @@ const DEFAULTS: AgentConfig = {
   },
   schedule: { slots: ['09:30', '18:00'], maxPerDay: 2 },
   guardrails: { maxLength: 500, minLength: 40, bannedPhrases: [] },
+  monitor: { keywords: [] },
 }
 
 /**
@@ -39,5 +42,6 @@ export function loadConfig(path = 'agent.config.json'): AgentConfig {
     content: { ...DEFAULTS.content, ...parsed.content },
     schedule: { ...DEFAULTS.schedule, ...parsed.schedule },
     guardrails: { ...DEFAULTS.guardrails, ...parsed.guardrails },
+    monitor: { ...DEFAULTS.monitor, ...parsed.monitor },
   }
 }

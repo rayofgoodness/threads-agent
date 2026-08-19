@@ -110,6 +110,22 @@ Content is deliberately files, not a database — drafts, edits and publish
 history all show up in `git diff`. `content/README.md` documents the format.
 Publishing defaults to dry: `runDue` does nothing without `commit: true`.
 
+### Monitoring
+
+`agent/monitor.ts` gathers inbound signals and dedupes them against
+`content/monitor-state.json` (gitignored). Each channel fails independently, so
+one blocked source does not hide the others. What each is worth today:
+
+- **Replies** work. Note `/me/replies` returns replies *written by* the account,
+  which is outbound noise — inbound means walking recent posts and reading
+  `/{post}/replies`, one call per post. That is why `/api/signals` is on-demand.
+- **Mentions** are blocked: `/me/mentions` answers `code 10` subcode 4279067
+  ("insufficient app access level") even though `threads_manage_mentions` is in
+  the token. Needs App Review, not a settings change.
+- **Keyword search** responds but at the default access level returns only the
+  account's own posts, which the monitor filters out as self-noise. Queries are
+  single words — multi-word phrases match nothing rather than falling back to OR.
+
 ### The API server
 
 `server/` puts the client behind same-origin JSON routes so the token stays out

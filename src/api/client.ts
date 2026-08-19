@@ -14,6 +14,22 @@ import type {
   ThreadsReply,
 } from '../threads/types.ts'
 
+export interface Signal {
+  kind: 'reply' | 'mention' | 'keyword'
+  id: string
+  username?: string
+  text: string
+  permalink?: string
+  timestamp?: string
+  matched?: string
+}
+
+export interface MonitorReport {
+  signals: Signal[]
+  unavailable: { source: string; reason: string }[]
+  checkedAt: string
+}
+
 export interface TokenStatus {
   valid: boolean
   expiresAt: string | null
@@ -65,5 +81,6 @@ export const api = {
   replies: (id: string) => request<Paged<ThreadsReply>>(`/posts/${id}/replies`),
   publish: (text: string) =>
     request<ThreadsPost>('/posts', { method: 'POST', body: JSON.stringify({ text }) }),
+  signals: (all = false) => request<MonitorReport>(`/signals${all ? '?all=1' : ''}`),
   remove: (id: string) => request<{ deleted: boolean }>(`/posts/${id}`, { method: 'DELETE' }),
 }

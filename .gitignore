@@ -38,4 +38,4 @@ __screenshots__/
 # Vite
 *.timestamp-*-*.mjs
 
-.env
+.envcontent/monitor-state.json
