@@ -102,6 +102,15 @@ of the browser: `http.ts` is a small router plus the error mapping (Threads code
 else → 502), `index.ts` declares the routes. `vite.config.ts` proxies `/api` to
 port 8787 in development, so the Vue app calls `/api/...` with no CORS involved.
 
+### The Vue app
+
+`src/api/client.ts` talks to `/api` only — it shares *types* with `src/threads/`
+but never imports the client itself, which is what keeps the token out of the
+bundle. `src/composables/useResource.ts` holds the load/error/pending pattern
+every panel uses; it keeps the old value on refresh so the feed does not blank.
+
+Run both processes in development: `npm run server` and `npm run dev`.
+
 ### Permissions
 
 The current token carries all 11 permissions the app has. `DELETE /v1.0/{id}`
