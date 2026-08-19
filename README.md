@@ -1,5 +1,7 @@
 # threads-agent
 
+[![CI](https://github.com/rayofgoodness/threads-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/rayofgoodness/threads-agent/actions/workflows/ci.yml)
+
 This template should help get you started developing with Vue 3 in Vite.
 
 ## Recommended IDE Setup
