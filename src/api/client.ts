@@ -61,12 +61,14 @@ export interface GuardrailViolation {
 export interface QueueItem {
   file: string
   path: string
-  status: 'queued' | 'published' | 'failed'
+  /** `draft` items live on the shelf and have no slot — they cannot publish. */
+  status: 'draft' | 'queued' | 'published' | 'failed'
   publishAt?: string
   publishedAt?: string
   postId?: string
   permalink?: string
   note?: string
+  topic?: string
   text: string
   violations?: GuardrailViolation[]
 }
@@ -88,6 +90,27 @@ export interface Generation {
   usage: { input: number; output: number; cached: number }
   /** Suggested slot per draft, in order, so the UI can show where it would go. */
   slots: string[]
+}
+
+/** A past generation as the database kept it. */
+export interface GenerationRecord {
+  id: number
+  createdAt: string
+  model: string
+  brief: string | null
+  inputTokens: number
+  outputTokens: number
+  cachedTokens: number
+  drafts: {
+    position: number
+    topic: string
+    planLine: number | null
+    text: string
+    note: string | null
+    /** `queued` once the draft left the generator for the queue or the shelf. */
+    status: string
+    queueFile: string | null
+  }[]
 }
 
 export interface TokenStatus {
@@ -179,6 +202,33 @@ export const api = {
     generationId?: number
     position?: number
   }) => request<QueueItem>('/queue', { method: 'POST', body: JSON.stringify(payload) }),
+
+  drafts: () => request<QueueItem[]>('/drafts'),
+  /** Keeps a text without a slot. Nothing on the shelf can publish. */
+  keepDraft: (payload: {
+    text: string
+    topic?: string
+    planLine?: number
+    generationId?: number
+    position?: number
+  }) => request<QueueItem>('/drafts', { method: 'POST', body: JSON.stringify(payload) }),
+  updateDraft: (file: string, text: string) =>
+    request<QueueItem>(`/drafts/${encodeURIComponent(file)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ text }),
+    }),
+  dropDraft: (file: string) =>
+    request<{ deleted: boolean }>(`/drafts/${encodeURIComponent(file)}`, { method: 'DELETE' }),
+  /** The one door from the shelf into the queue. */
+  scheduleDraft: (file: string, publishAt?: string) =>
+    request<QueueItem>(`/drafts/${encodeURIComponent(file)}/schedule`, {
+      method: 'POST',
+      body: JSON.stringify({ publishAt }),
+    }),
+
+  /** Past generations. Empty without a database — the history is optional. */
+  generations: (limit = 20) => request<GenerationRecord[]>(`/generations?limit=${limit}`),
+  dbStatus: () => request<{ enabled: boolean }>('/db'),
 
   /** Costs an Anthropic call and can take a while; nothing is queued by it. */
   generate: (payload: { brief?: string; count?: number }) =>

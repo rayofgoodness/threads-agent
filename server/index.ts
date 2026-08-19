@@ -16,7 +16,15 @@ import { collectSignals } from '../agent/monitor.ts'
 import { generateDrafts } from '../agent/generator.ts'
 import { markTopicDone, readPlan, writePlan } from '../agent/plan.ts'
 import { nextSlots } from '../agent/schedule.ts'
-import { addItem, listQueue } from '../agent/queue.ts'
+import {
+  addDraft,
+  addItem,
+  listDrafts,
+  listQueue,
+  removeDraft,
+  scheduleDraft,
+  updateDraft,
+} from '../agent/queue.ts'
 import { checkGuardrails } from '../agent/publisher.ts'
 import {
   isDbEnabled,
@@ -165,6 +173,52 @@ router.post('/api/queue', async ({ body }) => {
   }
 
   return { ...item, violations: checkGuardrails(current, text) }
+})
+
+/**
+ * The draft shelf. Nothing here has a slot, so nothing here can publish —
+ * `scheduleDraft` is the one door into the queue, and it is always a
+ * deliberate act.
+ */
+router.get('/api/drafts', async () => listDrafts(loadConfig()))
+
+router.post('/api/drafts', async ({ body }) => {
+  const payload = await body()
+  const current = loadConfig()
+  const text = requireString(payload, 'text')
+  const item = addDraft(current, text, optionalString(payload, 'topic'))
+
+  // Same bookkeeping as queueing: the topic has been written up either way,
+  // and a failure here must not undo a draft that is already on disk.
+  const planLine = typeof payload.planLine === 'number' ? payload.planLine : undefined
+  if (planLine !== undefined) markTopicDone(current, planLine)
+  const generationId = typeof payload.generationId === 'number' ? payload.generationId : undefined
+  const position = typeof payload.position === 'number' ? payload.position : undefined
+  if (generationId !== undefined && position !== undefined) {
+    await tryRecord('чернетку', () => markDraftQueued(generationId, position, item.file))
+  }
+
+  return { ...item, violations: checkGuardrails(current, text) }
+})
+
+router.put('/api/drafts/:file', async ({ params, body }) => {
+  const payload = await body()
+  const current = loadConfig()
+  const text = requireString(payload, 'text')
+  const item = updateDraft(current, params.file!, text)
+  return { ...item, violations: checkGuardrails(current, text) }
+})
+
+router.delete('/api/drafts/:file', async ({ params }) => ({
+  deleted: removeDraft(loadConfig(), params.file!),
+}))
+
+/** The draft leaves the shelf and takes a slot. */
+router.post('/api/drafts/:file/schedule', async ({ params, body }) => {
+  const payload = await body()
+  const current = loadConfig()
+  const at = optionalString(payload, 'publishAt') ?? nextSlots(current, 1)[0]
+  return scheduleDraft(current, params.file!, at)
 })
 
 /**

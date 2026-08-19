@@ -5,7 +5,9 @@ import { useResource } from './composables/useResource.ts'
 import AccessGate from './components/AccessGate.vue'
 import AccountBar from './components/AccountBar.vue'
 import ComposerCard from './components/ComposerCard.vue'
+import DraftsCard from './components/DraftsCard.vue'
 import GeneratorCard from './components/GeneratorCard.vue'
+import HistoryCard from './components/HistoryCard.vue'
 import InsightsCard from './components/InsightsCard.vue'
 import PlanCard from './components/PlanCard.vue'
 import PostCard from './components/PostCard.vue'
@@ -42,14 +44,30 @@ function onPublished() {
   window.setTimeout(() => void feed.refresh(), FEED_SETTLE_MS)
 }
 
-/** The queue card owns its own data; generating into it has to poke it. */
+/** Each card owns its own data; writing into one has to poke the others. */
 const queueCard = ref<InstanceType<typeof QueueCard>>()
 const planCard = ref<InstanceType<typeof PlanCard>>()
+const draftsCard = ref<InstanceType<typeof DraftsCard>>()
+const historyCard = ref<InstanceType<typeof HistoryCard>>()
 
 function onQueued() {
   void queueCard.value?.refresh()
-  // A queued draft may have ticked a topic off the plan.
+  // A queued draft may have ticked a topic off the plan, and the history
+  // records where each draft ended up.
   void planCard.value?.refresh()
+  void historyCard.value?.refresh()
+}
+
+function onKept() {
+  void draftsCard.value?.refresh()
+  void planCard.value?.refresh()
+  void historyCard.value?.refresh()
+}
+
+/** Scheduling empties one shelf into the other. */
+function onScheduled() {
+  void queueCard.value?.refresh()
+  void draftsCard.value?.refresh()
 }
 </script>
 
@@ -64,7 +82,11 @@ function onQueued() {
       <div class="column">
         <ComposerCard @published="onPublished" />
 
-        <GeneratorCard @queued="onQueued" />
+        <GeneratorCard @queued="onQueued" @kept="onKept" />
+
+        <DraftsCard ref="draftsCard" @scheduled="onScheduled" />
+
+        <HistoryCard ref="historyCard" @kept="onKept" />
 
         <section aria-labelledby="feed-heading">
           <div class="feed-head">

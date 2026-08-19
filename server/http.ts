@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { DraftError } from '../agent/queue.ts'
 import { ThreadsApiError } from '../src/threads/index.ts'
 
 export interface RequestContext {
@@ -125,6 +126,9 @@ export function createHandler(router: Router) {
         })
       }
       if (error instanceof HttpError) return send(response, error.status, { error: error.message })
+      if (error instanceof DraftError) {
+        return send(response, error.reason === 'missing' ? 404 : 400, { error: error.message })
+      }
       const message = error instanceof Error ? error.message : String(error)
       console.error('[api] unhandled', error)
       send(response, 500, { error: message })

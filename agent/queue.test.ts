@@ -3,7 +3,19 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { defaultConfig, type AgentConfig } from './config.ts'
-import { addItem, dueItems, listPublished, listQueue, settleItem } from './queue.ts'
+import {
+  addDraft,
+  addItem,
+  DraftError,
+  dueItems,
+  listDrafts,
+  listPublished,
+  listQueue,
+  removeDraft,
+  scheduleDraft,
+  settleItem,
+  updateDraft,
+} from './queue.ts'
 
 let root: string
 let config: AgentConfig
@@ -15,6 +27,7 @@ beforeEach(() => {
     timezone: 'Europe/Kyiv',
     content: {
       queueDir: join(root, 'queue'),
+      draftsDir: join(root, 'drafts'),
       publishedDir: join(root, 'published'),
       knowledgeDir: join(root, 'knowledge'),
       planFile: join(root, 'plan.md'),
@@ -96,5 +109,85 @@ describe('queue files', () => {
     const [item] = listQueue(config)
     expect(item?.status).toBe('queued')
     expect(item?.text).toBe('просто текст')
+  })
+})
+
+describe('drafts', () => {
+  it('keeps a draft out of the queue entirely', () => {
+    addDraft(config, 'Текст чернетки')
+    expect(listQueue(config)).toEqual([])
+    expect(dueItems(config)).toEqual([])
+    expect(listDrafts(config)).toHaveLength(1)
+  })
+
+  it('records the topic it was written for', () => {
+    const draft = addDraft(config, 'Текст', 'Тема поста')
+    expect(listDrafts(config)[0]?.topic).toBe('Тема поста')
+    expect(readFileSync(draft.path, 'utf8')).toContain('topic: Тема поста')
+  })
+
+  // The shelf has no schedule, so newest-first is the only ordering that means
+  // anything — and the file name is the timestamp it was kept at.
+  it('lists the newest first', () => {
+    mkdirSync(config.content.draftsDir, { recursive: true })
+    for (const [name, text] of [
+      ['2026-01-01T00-00-00-000Z.md', 'Стара'],
+      ['2026-08-01T00-00-00-000Z.md', 'Свіжа'],
+    ]) {
+      writeFileSync(join(config.content.draftsDir, name!), `---\nstatus: draft\n---\n\n${text}\n`)
+    }
+    expect(listDrafts(config).map((item) => item.text)).toEqual(['Свіжа', 'Стара'])
+  })
+
+  it('rewrites the text and keeps the status', () => {
+    const draft = addDraft(config, 'Було', 'Тема')
+    const updated = updateDraft(config, draft.file, 'Стало')
+    expect(updated.text).toBe('Стало')
+    expect(updated.status).toBe('draft')
+    expect(listDrafts(config)[0]?.topic).toBe('Тема')
+  })
+
+  it('deletes on request', () => {
+    const draft = addDraft(config, 'Тимчасова')
+    removeDraft(config, draft.file)
+    expect(listDrafts(config)).toEqual([])
+  })
+
+  it('moves into the queue with a slot, and only then becomes due', () => {
+    const draft = addDraft(config, 'Готова до публікації', 'Тема')
+    const queued = scheduleDraft(config, draft.file, '2020-01-01T00:00:00.000Z')
+
+    expect(listDrafts(config)).toEqual([])
+    expect(queued.status).toBe('queued')
+    expect(queued.topic).toBe('Тема')
+    expect(dueItems(config).map((item) => item.text)).toEqual(['Готова до публікації'])
+  })
+
+  // The file name reaches this from the browser; a path separator in it would
+  // let a request read or write outside the drafts directory.
+  it('refuses a name that is not a plain file in the drafts directory', () => {
+    expect(() => removeDraft(config, '../plan.md')).toThrow(DraftError)
+    expect(() => removeDraft(config, 'note.txt')).toThrow(DraftError)
+    try {
+      removeDraft(config, '../plan.md')
+    } catch (error) {
+      expect((error as DraftError).reason).toBe('invalid')
+    }
+  })
+
+  it('reports a missing draft as missing, not as invalid', () => {
+    try {
+      updateDraft(config, '2020-01-01T00-00-00-000Z.md', 'текст')
+      expect.unreachable()
+    } catch (error) {
+      expect((error as DraftError).reason).toBe('missing')
+    }
+  })
+
+  // A file that ends up in the wrong directory must not be treated as due.
+  it('never treats a draft status as publishable', () => {
+    mkdirSync(config.content.queueDir, { recursive: true })
+    writeFileSync(join(config.content.queueDir, 'stray.md'), '---\nstatus: draft\n---\n\nЗабрела сюди')
+    expect(dueItems(config)).toEqual([])
   })
 })

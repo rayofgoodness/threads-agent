@@ -13,6 +13,7 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'generator-'))
   config = defaultConfig()
   config.content.queueDir = join(root, 'queue')
+  config.content.draftsDir = join(root, 'drafts')
   config.content.publishedDir = join(root, 'published')
   config.content.knowledgeDir = join(root, 'knowledge')
   config.content.planFile = join(root, 'plan.md')

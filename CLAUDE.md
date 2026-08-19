@@ -118,6 +118,13 @@ route, never from a component.
 
 ### The agent layer
 
+There are two shelves, not one. `content/drafts/` holds texts with no slot —
+`status: draft`, invisible to `dueItems` and in a directory `runDue` never
+reads, so a kept text cannot publish by accident. `content/queue/` holds what
+is scheduled. `scheduleDraft` is the only path between them and is always an
+explicit act; the file name is the id, and `draftPath` rejects anything with a
+separator in it, since that id reaches the server from the browser.
+
 `agent/` turns files into a schedule: `config.ts` reads `agent.config.json`
 (slots, daily cap, length bounds, banned phrases), `queue.ts` reads and writes
 the markdown files under `content/`, `publisher.ts` applies the guardrails and
@@ -132,7 +139,9 @@ Publishing defaults to dry: `runDue` does nothing without `commit: true`.
 ### Drafting
 
 `generator.ts` asks Claude for drafts and writes nothing: the caller decides
-what reaches the queue. Its prompt has two halves, split so the stable one can
+what happens to them — kept on the shelf (`--draft`, «У чернетки») or queued
+with a slot (`--yes`, «У чергу»). Keeping has no guardrail gate; queueing does,
+because a queued item publishes on its own. Its prompt has two halves, split so the stable one can
 be cached — `buildSystemPrompt` (the `voice` block plus everything under
 `content/knowledge/`, read by `knowledge.ts`) and `buildUserPrompt` (the plan,
 the open topics, recently published posts, the brief).
@@ -156,8 +165,10 @@ by line index, never by text, because two topics can legitimately read the same.
 `db/` is optional, and every function in it is a no-op without `DATABASE_URL` —
 `recordGeneration` then returns `undefined`, which `markDraftQueued` accepts, so
 callers need no branching. It stores what git cannot: `generations` (what was
-asked, what it cost), `drafts` (each variant and whether it was queued) and
-`post_metrics` (one row per reading, so a post's curve survives). Content stays
+asked, what it cost), `drafts` (every variant, including the ones nobody kept)
+and `post_metrics` (one row per reading, so a post's curve survives).
+`agent.ts history` and the dashboard's history card read it back, and a text
+from an old run can be pulled onto the draft shelf again. Content stays
 in `content/`; do not move it here.
 
 Writes go through `tryRecord`, which reports a failure and returns `undefined`

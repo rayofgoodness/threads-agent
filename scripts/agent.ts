@@ -8,12 +8,28 @@
  * every step stays reviewable in git.
  */
 import { loadConfig } from '../agent/config.ts'
-import { addItem, listPublished, listQueue, dueItems } from '../agent/queue.ts'
+import {
+  addDraft,
+  addItem,
+  dueItems,
+  listDrafts,
+  listPublished,
+  listQueue,
+  removeDraft,
+  scheduleDraft,
+} from '../agent/queue.ts'
 import { checkGuardrails, publishedToday, runDue } from '../agent/publisher.ts'
 import { collectSignals } from '../agent/monitor.ts'
 import { markTopicDone, pendingTopics, readPlan } from '../agent/plan.ts'
 import { generateDrafts } from '../agent/generator.ts'
-import { closeDb, markDraftQueued, recordGeneration, tryRecord } from '../db/index.ts'
+import {
+  closeDb,
+  isDbEnabled,
+  listGenerations,
+  markDraftQueued,
+  recordGeneration,
+  tryRecord,
+} from '../db/index.ts'
 import { nextSlots as slotsAfter } from '../agent/schedule.ts'
 
 /** Bound to the loaded config so the call sites stay `nextSlots(n)`. */
@@ -25,15 +41,19 @@ const config = loadConfig()
 const COMMANDS = `
 Commands:
   list                    queued items, earliest slot first
-  add <text> [--at ISO]   add a draft to the queue (default slot: next free one)
+  add <text> [--at ISO]   queue a post directly (default slot: next free one)
   check                   run the guardrails over everything queued
   due                     what would go out right now
   run [--yes]             publish everything due; without --yes it only reports
   published               what has already gone out
   slots                   the next few configured publishing slots
   plan                    the content plan and what is still open in it
-  generate [--yes]        draft posts in the account's voice; --yes queues them
-           [--count N] [--brief "..."]
+  generate [--draft|--yes]  draft posts in the account's voice
+           [--count N] [--brief "..."]   --draft keeps them, --yes queues them
+  drafts                  the draft shelf — kept, but with no slot
+  schedule <file> [--at ISO]  move a draft into the queue
+  drop <file>             delete a draft
+  history [--limit N]     past generations, if a database is configured
   watch [--all]           inbound signals: replies, mentions, watched keywords
 `
 
@@ -145,10 +165,68 @@ async function main() {
       return
     }
 
+    case 'drafts': {
+      const items = listDrafts(config)
+      if (!items.length) return console.log('Чернеток нема.')
+      for (const item of items) {
+        console.log(`${item.file}${item.topic ? `  ${item.topic}` : ''}`)
+        console.log(`    ${item.text.slice(0, 90).replace(/\n/g, ' ')}`)
+      }
+      console.log(`\nЗапланувати: schedule <file>`)
+      return
+    }
+
+    case 'schedule': {
+      const file = args[0]
+      if (!file) throw new Error('schedule: потрібне імʼя файлу чернетки')
+      const at = flag('--at') ?? nextSlots(1)[0]
+      const item = scheduleDraft(config, file, at)
+      console.log(`У черзі ${item.file} на ${at}`)
+      const violations = checkGuardrails(config, item.text)
+      if (violations.length) {
+        console.log('Увага, обмеження порушені:')
+        for (const violation of violations) console.log(`  - ${violation.detail}`)
+      }
+      return
+    }
+
+    case 'history': {
+      if (!isDbEnabled()) {
+        return console.log('Історія не ведеться — нема DATABASE_URL (див. docker-compose.yml).')
+      }
+      const records = await listGenerations(flag('--limit') ? Number(flag('--limit')) : undefined)
+      await closeDb()
+      if (!records.length) return console.log('Ще нічого не генерувалося.')
+
+      for (const record of records) {
+        const cached = record.cachedTokens ? `, ${record.cachedTokens} з кешу` : ''
+        console.log(
+          `\n${record.createdAt}  ${record.model}  ` +
+            `${record.inputTokens}→${record.outputTokens} токенів${cached}`,
+        )
+        if (record.brief) console.log(`  бриф: ${record.brief}`)
+        for (const draft of record.drafts) {
+          const where = draft.queueFile ? ` → ${draft.queueFile}` : ''
+          console.log(`  [${draft.status}] ${draft.topic}${where}`)
+          console.log(`      ${draft.text.slice(0, 90).replace(/\n/g, ' ')}`)
+        }
+      }
+      return
+    }
+
+    case 'drop': {
+      const file = args[0]
+      if (!file) throw new Error('drop: потрібне імʼя файлу чернетки')
+      removeDraft(config, file)
+      console.log(`Видалено ${file}`)
+      return
+    }
+
     case 'generate': {
       const count = flag('--count') ? Number(flag('--count')) : undefined
       const brief = flag('--brief')
       const commit = args.includes('--yes')
+      const keep = args.includes('--draft')
 
       const result = await generateDrafts(config, { count, brief })
       const drafts = result.drafts
@@ -166,7 +244,18 @@ async function main() {
         console.log(draft.text)
         for (const violation of draft.violations) console.log(`    ! ${violation.detail}`)
 
+        if (keep) {
+          const kept = addDraft(config, draft.text, draft.topic)
+          if (draft.planLine !== undefined) markTopicDone(config, draft.planLine)
+          queued.push({ index, file: kept.file })
+          console.log(`    → чернетка: ${kept.file}`)
+          return
+        }
+
         if (!commit) return
+        // A queued item publishes on its slot, so anything failing the
+        // guardrails is kept back; `--draft` has no such gate, since a draft
+        // is exactly where a text that still needs work belongs.
         if (draft.violations.length) {
           console.log('    пропущено: не проходить обмеження')
           return
@@ -183,7 +272,9 @@ async function main() {
       }
       await closeDb()
 
-      if (!commit) console.log('\nПробний запуск. Щоб додати в чергу: generate --yes')
+      if (!commit && !keep) {
+        console.log('\nПробний запуск. Зберегти: generate --draft, у чергу: generate --yes')
+      }
       return
     }
 

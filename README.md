@@ -102,8 +102,19 @@ node scripts/agent.ts watch [--all]      # inbound replies, mentions, keywords
 node scripts/agent.ts plan                       # the plan, and what is open in it
 node scripts/agent.ts generate                   # drafts, printed, nothing queued
 node scripts/agent.ts generate --count 5 --brief "про ціни"
+node scripts/agent.ts generate --draft            # keep them all, no slot
 node scripts/agent.ts generate --yes             # queue what passes the guardrails
+node scripts/agent.ts drafts                     # the draft shelf
+node scripts/agent.ts schedule <file> [--at ISO] # a draft takes a slot
+node scripts/agent.ts drop <file>
+node scripts/agent.ts history [--limit N]        # past generations, needs a database
 ```
+
+A generated post has two destinations. `content/drafts/` is a shelf: no slot,
+its own directory, and `runDue` never reads it — a kept text cannot publish by
+accident, which is what makes it the right place for anything that still needs
+work. `content/queue/` is the schedule. Moving between them is one explicit
+command (or one button), and only that move applies a slot.
 
 The model is given three things: the `voice` block of `agent.config.json` (who
 is speaking, to whom, the tone, the rules, what never appears), everything under
@@ -133,6 +144,10 @@ override it with `POSTGRES_PORT`. Three tables: `generations` (what was asked
 and what it cost), `drafts` (each variant and whether it was queued) and
 `post_metrics` (one row per reading, so a post's curve is visible rather than
 just its latest number). Content itself is never stored there.
+
+Every variant is recorded, including the ones nobody kept — `agent.ts history`
+and the dashboard read them back, and an old draft can be pulled onto the shelf
+again to work on.
 
 `run` is dry unless you pass `--yes`. Slots, the daily cap, length bounds,
 banned phrases and watched keywords all come from `agent.config.json`.
@@ -179,7 +194,7 @@ Findings from working against the live account, not guesses:
 ## Verification
 
 ```sh
-npm test          # 80 tests, no network
+npm test          # 89 tests, no network
 npm run type-check
 npm run lint
 ```

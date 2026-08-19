@@ -3,6 +3,7 @@
   "timezone": "Europe/Kyiv",
   "content": {
     "queueDir": "content/queue",
+    "draftsDir": "content/drafts",
     "publishedDir": "content/published",
     "knowledgeDir": "content/knowledge",
     "planFile": "content/plan.md"

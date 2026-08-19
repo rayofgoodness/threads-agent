@@ -9,7 +9,7 @@ import { api, ApiError, type Generation } from '../api/client.ts'
  * the last word is a human's, and forcing a queue-then-edit round trip through
  * the filesystem would make small fixes cost more than they should.
  */
-const emit = defineEmits<{ queued: [] }>()
+const emit = defineEmits<{ queued: []; kept: [] }>()
 
 const MAX_LENGTH = 500
 
@@ -21,8 +21,9 @@ const result = ref<Generation>()
 
 /** Local, editable copies — the returned drafts are the starting point. */
 const texts = ref<string[]>([])
-const queued = ref(new Set<number>())
-const queueing = ref<number>()
+/** Index → what happened to it, so a handled draft stops offering both buttons. */
+const settled = ref(new Map<number, 'queued' | 'kept'>())
+const busy = ref<number>()
 
 const drafts = computed(() => result.value?.drafts ?? [])
 
@@ -37,7 +38,7 @@ async function generate() {
     })
     result.value = generation
     texts.value = generation.drafts.map((draft) => draft.text)
-    queued.value = new Set()
+    settled.value = new Map()
   } catch (cause) {
     error.value = cause instanceof ApiError ? cause.message : String(cause)
   } finally {
@@ -45,30 +46,38 @@ async function generate() {
   }
 }
 
-async function enqueue(index: number) {
+/** Fields both destinations record: which topic it answered, which call it came from. */
+function provenance(index: number) {
   const draft = drafts.value[index]
-  const text = texts.value[index]
-  if (!draft || !text || queueing.value !== undefined) return
+  return {
+    // Only tick the plan line when the text still answers that topic; an
+    // edited draft may no longer, but that call is the reviewer's, not ours.
+    ...(draft?.planLine !== undefined ? { planLine: draft.planLine } : {}),
+    ...(result.value?.id !== null && result.value?.id !== undefined
+      ? { generationId: result.value.id, position: index }
+      : {}),
+  }
+}
 
-  queueing.value = index
+async function act(index: number, where: 'queued' | 'kept') {
+  const text = texts.value[index]
+  if (!text || busy.value !== undefined) return
+
+  busy.value = index
   error.value = undefined
   try {
-    await api.enqueue({
-      text,
-      publishAt: result.value?.slots[index],
-      // Only tick the plan line when the text still answers that topic; an
-      // edited draft may no longer, but that call is the reviewer's, not ours.
-      ...(draft.planLine !== undefined ? { planLine: draft.planLine } : {}),
-      ...(result.value?.id !== null && result.value?.id !== undefined
-        ? { generationId: result.value.id, position: index }
-        : {}),
-    })
-    queued.value = new Set(queued.value).add(index)
-    emit('queued')
+    if (where === 'queued') {
+      await api.enqueue({ text, publishAt: result.value?.slots[index], ...provenance(index) })
+    } else {
+      await api.keepDraft({ text, topic: drafts.value[index]?.topic, ...provenance(index) })
+    }
+    settled.value = new Map(settled.value).set(index, where)
+    if (where === 'queued') emit('queued')
+    else emit('kept')
   } catch (cause) {
     error.value = cause instanceof ApiError ? cause.message : String(cause)
   } finally {
-    queueing.value = undefined
+    busy.value = undefined
   }
 }
 
@@ -126,18 +135,34 @@ function slotLabel(index: number): string {
 
         <textarea v-model="texts[index]" :aria-label="`Текст варіанта ${index + 1}`"></textarea>
 
-        <div class="row">
+        <div class="row actions">
           <span
             class="small"
             :class="(texts[index]?.length ?? 0) > MAX_LENGTH ? 'error' : 'muted'"
           >
             {{ texts[index]?.length ?? 0 }} / {{ MAX_LENGTH }}
           </span>
+          <!-- Keeping is the softer of the two and comes first: a draft on the
+               shelf has no slot and cannot publish, so it is the safe default
+               for anything that still needs work. -->
           <button
-            :disabled="queued.has(index) || queueing !== undefined"
-            @click="enqueue(index)"
+            :disabled="settled.has(index) || busy !== undefined"
+            @click="act(index, 'kept')"
           >
-            {{ queued.has(index) ? 'У черзі' : queueing === index ? 'Додаю…' : 'У чергу' }}
+            {{
+              settled.get(index) === 'kept'
+                ? 'У чернетках'
+                : busy === index
+                  ? 'Зберігаю…'
+                  : 'У чернетки'
+            }}
+          </button>
+          <button
+            class="primary"
+            :disabled="settled.has(index) || busy !== undefined"
+            @click="act(index, 'queued')"
+          >
+            {{ settled.get(index) === 'queued' ? 'У черзі' : 'У чергу' }}
           </button>
         </div>
 
@@ -171,6 +196,11 @@ label textarea {
 
 .row button {
   margin-inline-start: auto;
+}
+
+/* Two buttons here, so only the first one takes the free space. */
+.actions button + button {
+  margin-inline-start: 0;
 }
 
 .count {

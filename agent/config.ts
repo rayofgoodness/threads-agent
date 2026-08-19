@@ -33,7 +33,13 @@ export interface GenerationConfig {
 export interface AgentConfig {
   account: string
   timezone: string
-  content: { queueDir: string; publishedDir: string; knowledgeDir: string; planFile: string }
+  content: {
+    queueDir: string
+    draftsDir: string
+    publishedDir: string
+    knowledgeDir: string
+    planFile: string
+  }
   schedule: { slots: string[]; maxPerDay: number }
   guardrails: { maxLength: number; minLength: number; bannedPhrases: string[] }
   voice: VoiceConfig
@@ -47,6 +53,7 @@ const DEFAULTS: AgentConfig = {
   timezone: 'Europe/Kyiv',
   content: {
     queueDir: 'content/queue',
+    draftsDir: 'content/drafts',
     publishedDir: 'content/published',
     knowledgeDir: 'content/knowledge',
     planFile: 'content/plan.md',

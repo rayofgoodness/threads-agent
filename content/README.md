@@ -6,7 +6,8 @@ hidden state.
 
 | Directory    | What lives here                                                        |
 | ------------ | ---------------------------------------------------------------------- |
-| `queue/`     | Drafts waiting for their slot. One post per file.                       |
+| `drafts/`    | Kept texts with no slot. Nothing here publishes.                        |
+| `queue/`     | Posts waiting for their slot. One post per file.                        |
 | `published/` | Where a file moves once it goes out, stamped with its post id and link. |
 | `knowledge/` | Source material the agent writes from — see `knowledge/README.md`.      |
 
@@ -26,10 +27,16 @@ publishAt: 2026-08-20T09:30:00+03:00
 The text of the post.
 ```
 
-`status` is `queued`, `published` or `failed`. A failed item keeps a `note`
+A draft file looks the same but carries `status: draft`, no `publishAt`, and
+an optional `topic`. It lives in `drafts/` and `runDue` never looks there —
+keeping a text has to be cheaper than scheduling one, or nobody keeps any.
+`scheduleDraft` (CLI: `agent.ts schedule <file>`) is the one door from the
+shelf into the queue, and it is always an explicit act.
+
+`status` is `draft`, `queued`, `published` or `failed`. A failed item keeps a `note`
 with the reason and stays in `queue/` so it can be fixed and retried.
 
 Add items with `node scripts/agent.ts add "…"` rather than by hand — it picks
 the next free slot and runs the guardrails immediately. `node scripts/agent.ts
-generate` writes them from the plan and the voice config; without `--yes` it
-only prints.
+generate` writes them from the plan and the voice config; without a flag it
+only prints, `--draft` keeps them on the shelf, `--yes` puts them in the queue.

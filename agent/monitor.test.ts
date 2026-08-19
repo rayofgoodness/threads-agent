@@ -43,6 +43,7 @@ beforeEach(() => {
     timezone: 'Europe/Kyiv',
     content: {
       queueDir: join(root, 'q'),
+      draftsDir: join(root, 'd'),
       publishedDir: join(root, 'p'),
       knowledgeDir: join(root, 'k'),
       planFile: join(root, 'plan.md'),
