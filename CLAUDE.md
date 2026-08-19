@@ -159,6 +159,17 @@ what is due, the daily cap bounds it, and a machine asleep at 09:30 still
 publishes on waking. **While it is loaded, anything queued goes public without
 review** — `launchctl bootout` is the off switch.
 
+### Deployment
+
+`deploy/` holds the Raspberry Pi setup: systemd units for the server and the
+publish timer, a `cloudflared` tunnel config, and `deploy/README.md` with the
+steps. The shape is one Node process on loopback serving `/api` plus the built
+`dist/`, with Cloudflare reaching it through a tunnel.
+
+Two environment variables matter there and nowhere else: `HOST` (default
+`127.0.0.1`) and `THREADS_AGENT_TOKEN`. The server refuses to bind a non-
+loopback address without the token, because `/api` can publish and delete.
+
 ### The API server
 
 `server/` puts the client behind same-origin JSON routes so the token stays out

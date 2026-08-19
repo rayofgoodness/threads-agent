@@ -8,11 +8,14 @@
  * routes and Threads never sees a cross-origin request.
  */
 import { createServer } from 'node:http'
+import { join } from 'node:path'
 import { ThreadsClient } from '../src/threads/index.ts'
 import type { AccountMetric, PostMetric, ReplyControl } from '../src/threads/types.ts'
 import { loadConfig } from '../agent/config.ts'
 import { collectSignals } from '../agent/monitor.ts'
-import { createHandler, HttpError, Router } from './http.ts'
+import { checkAuth, resolveBinding } from './auth.ts'
+import { createHandler, HttpError, Router, send } from './http.ts'
+import { serveStatic } from './static.ts'
 
 // `.env` is not exported into the shell automatically; load it if the token is absent.
 if (!process.env.THREADS_ACCESS_TOKEN) {
@@ -23,9 +26,11 @@ if (!process.env.THREADS_ACCESS_TOKEN) {
   }
 }
 
-const PORT = Number(process.env.PORT ?? 8787)
+const secret = process.env.THREADS_AGENT_TOKEN
+const { host, port } = resolveBinding(process.env, secret)
 const client = ThreadsClient.fromEnv()
 const config = loadConfig()
+const distRoot = join(process.cwd(), 'dist')
 
 function requireString(body: Record<string, unknown>, key: string): string {
   const value = body[key]
@@ -47,7 +52,7 @@ function splitMetrics<T extends string>(query: URLSearchParams): T[] | undefined
 
 const router = new Router()
 
-router.get('/api/health', async () => ({ ok: true, port: PORT }))
+router.get('/api/health', async () => ({ ok: true, port }))
 
 router.get('/api/token', async () => {
   const info = await client.inspectToken()
@@ -125,8 +130,25 @@ router.delete('/api/posts/:id', async ({ params }) => ({
   deleted: await client.deletePost(params.id!),
 }))
 
-const server = createServer(createHandler(router))
+const api = createHandler(router)
 
-server.listen(PORT, () => {
-  console.log(`[api] listening on http://localhost:${PORT}`)
+const server = createServer((request, response) => {
+  const pathname = new URL(request.url ?? '/', 'http://localhost').pathname
+
+  if (pathname.startsWith('/api/')) {
+    if (!checkAuth(request, secret)) {
+      return send(response, 401, { error: 'Потрібен Authorization: Bearer <THREADS_AGENT_TOKEN>' })
+    }
+    return void api(request, response)
+  }
+
+  // Anything outside /api is the dashboard, when it has been built.
+  if (!serveStatic(distRoot, pathname, response)) {
+    send(response, 404, { error: 'Дашборд не зібраний — виконай npm run build' })
+  }
+})
+
+server.listen(port, host, () => {
+  console.log(`[api] listening on http://${host}:${port}`)
+  console.log(secret ? '[api] доступ за токеном' : '[api] без токена, лише loopback')
 })

@@ -1,0 +1,50 @@
+[Unit]
+Description=Threads agent API and dashboard
+Documentation=https://github.com/rayofgoodness/threads-agent
+After=network-online.target
+Wants=network-online.target
+
+# These belong to [Unit]; systemd ignores them under [Service].
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+[Service]
+Type=simple
+User=threads
+Group=threads
+WorkingDirectory=/opt/threads-agent
+
+# Holds THREADS_ACCESS_TOKEN, THREADS_APP_ID, THREADS_APP_SECRET and
+# THREADS_AGENT_TOKEN. Plain KEY=value, no `export`, no quotes. Keep it 0600.
+EnvironmentFile=/opt/threads-agent/.env
+
+# Loopback only: cloudflared connects locally, so nothing needs to reach the
+# port from the network. Setting HOST to anything else requires
+# THREADS_AGENT_TOKEN — the server refuses the unauthenticated combination.
+Environment=HOST=127.0.0.1
+Environment=PORT=8787
+Environment=NODE_ENV=production
+
+ExecStart=/usr/bin/node server/index.ts
+
+# Give up only if it fails constantly, so a bad deploy stays visible.
+Restart=always
+RestartSec=5
+
+# The Threads token lives in this process; keep its reach small.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# Everything the process writes: the queue, published history, monitor state.
+ReadWritePaths=/opt/threads-agent/content
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=threads-agent
+
+[Install]
+WantedBy=multi-user.target

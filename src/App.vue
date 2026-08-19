@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { api } from './api/client.ts'
 import { useResource } from './composables/useResource.ts'
+import AccessGate from './components/AccessGate.vue'
 import AccountBar from './components/AccountBar.vue'
 import ComposerCard from './components/ComposerCard.vue'
 import InsightsCard from './components/InsightsCard.vue'
@@ -13,6 +14,8 @@ const feed = useResource(() => api.posts(25))
 const token = useResource(api.token)
 
 const posts = computed(() => feed.data.value?.data ?? [])
+/** A 401 means the deployment is gated; everything else stays as it was. */
+const locked = computed(() => feed.error.value?.includes('Authorization: Bearer') ?? false)
 const canDelete = computed(() => token.data.value?.canDelete ?? false)
 
 /**
@@ -38,9 +41,12 @@ function onPublished() {
 
 <template>
   <div class="shell">
-    <AccountBar />
+    <AccessGate v-if="locked" />
 
-    <main>
+    <template v-else>
+      <AccountBar />
+
+      <main>
       <div class="column">
         <ComposerCard @published="onPublished" />
 
@@ -70,11 +76,12 @@ function onPublished() {
         </section>
       </div>
 
-      <aside>
-        <InsightsCard />
-        <SignalsCard />
-      </aside>
-    </main>
+        <aside>
+          <InsightsCard />
+          <SignalsCard />
+        </aside>
+      </main>
+    </template>
   </div>
 </template>
 

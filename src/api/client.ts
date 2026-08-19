@@ -51,12 +51,33 @@ export class ApiError extends Error {
   }
 }
 
+const TOKEN_KEY = 'threads-agent-token'
+
+/**
+ * Access token for this dashboard — not the Threads token, which never leaves
+ * the server. Only needed when the deployment sets `THREADS_AGENT_TOKEN`; a
+ * loopback-only server accepts requests without it.
+ */
+export function getAccessToken(): string {
+  return localStorage.getItem(TOKEN_KEY) ?? ''
+}
+
+export function setAccessToken(value: string) {
+  if (value) localStorage.setItem(TOKEN_KEY, value)
+  else localStorage.removeItem(TOKEN_KEY)
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getAccessToken()
   let response: Response
   try {
     response = await fetch(`/api${path}`, {
       ...init,
-      headers: { 'Content-Type': 'application/json', ...init?.headers },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...init?.headers,
+      },
     })
   } catch {
     throw new ApiError(0, 'Сервер недоступний — запусти `npm run server`')

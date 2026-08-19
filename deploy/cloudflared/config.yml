@@ -1,0 +1,28 @@
+# Cloudflare Tunnel: the Pi dials out to Cloudflare, so nothing has to be
+# port-forwarded and the origin stays on loopback.
+#
+#   cloudflared tunnel login
+#   cloudflared tunnel create threads-agent
+#   cloudflared tunnel route dns threads-agent threads.example.com
+#   sudo cloudflared service install
+#
+# Replace the tunnel id and hostname before use.
+
+tunnel: 00000000-0000-0000-0000-000000000000
+credentials-file: /etc/cloudflared/00000000-0000-0000-0000-000000000000.json
+
+# Keep the connection alive on a home line that drops.
+originRequest:
+  connectTimeout: 30s
+  noHappyEyeballs: false
+  keepAliveTimeout: 90s
+
+ingress:
+  - hostname: threads.example.com
+    service: http://127.0.0.1:8787
+    originRequest:
+      # The dashboard and the API are the same origin; no host rewrite needed.
+      httpHostHeader: threads.example.com
+
+  # Everything unmatched is refused rather than proxied somewhere by accident.
+  - service: http_status:404

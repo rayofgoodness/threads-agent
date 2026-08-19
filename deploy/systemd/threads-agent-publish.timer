@@ -1,0 +1,14 @@
+[Unit]
+Description=Check the Threads queue every 15 minutes
+
+[Timer]
+# Not tied to the configured slots: the agent decides what is due and the daily
+# cap bounds it, so a Pi that was off at 09:30 still publishes once it is back.
+OnBootSec=5min
+OnUnitActiveSec=15min
+# Catch up after downtime instead of waiting for the next whole interval.
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
