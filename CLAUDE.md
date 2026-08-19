@@ -39,7 +39,12 @@ Current state and open tasks: @PROGRESS.md
   (`constructor(readonly x: number)`), `enum` and `namespace` crash at load with
   `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` — assign fields in the body instead.
 
-There is no test setup. Verification = `npm run type-check && npm run lint`.
+- `npm test` — Vitest (`npm run test:watch` to iterate). Tests sit next to the
+  code as `*.test.ts` and cover the queue, guardrails, monitor and router. They
+  never touch the network: the Threads client takes an injected `fetchImpl`, and
+  the agent modules take an injected client, so nothing reaches the real account.
+
+Verification = `npm test && npm run type-check && npm run lint`.
 
 Node: `^22.18.0 || >=24.12.0` (enforced via `engines`).
 

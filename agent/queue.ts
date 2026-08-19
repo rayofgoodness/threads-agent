@@ -92,9 +92,14 @@ export function dueItems(config: AgentConfig, now = new Date()): QueueItem[] {
 
 export function addItem(config: AgentConfig, text: string, publishAt?: string): QueueItem {
   mkdirSync(config.content.queueDir, { recursive: true })
-  // Timestamped name keeps the directory listing in chronological order.
+  // Timestamped name keeps the directory listing in chronological order. Two
+  // adds inside the same millisecond would collide, so the name gets a suffix
+  // until it is free — otherwise the second draft silently replaces the first.
   const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-  const file = `${stamp}.md`
+  let file = `${stamp}.md`
+  for (let suffix = 2; existsSync(join(config.content.queueDir, file)); suffix++) {
+    file = `${stamp}-${suffix}.md`
+  }
   const path = join(config.content.queueDir, file)
   const item = { status: 'queued' as const, publishAt, text: text.trim() }
   writeFileSync(path, serialize(item))
