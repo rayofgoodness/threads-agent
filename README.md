@@ -105,7 +105,7 @@ While that job is loaded, queued posts go public without further review.
 `deploy/` has systemd units, a Cloudflare Tunnel config and step-by-step notes —
 see [`deploy/README.md`](deploy/README.md). One Node process serves `/api` and
 the built dashboard on loopback; `cloudflared` reaches it through a tunnel, so
-nothing is port-forwarded. The dashboard lives at <https://quarters.casa>.
+nothing is port-forwarded. The dashboard lives at <https://threads.quarters.casa>.
 
 `/api` can publish and delete, so the server refuses to bind a non-loopback
 address unless `THREADS_AGENT_TOKEN` is set, and every `/api` request must then

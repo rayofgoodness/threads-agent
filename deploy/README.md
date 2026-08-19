@@ -5,7 +5,7 @@ loopback; `cloudflared` dials out to Cloudflare and forwards the hostname to it.
 Nothing is port-forwarded, and the origin is never reachable directly.
 
 ```
-browser → https://quarters.casa → Cloudflare edge (TLS, Access) → tunnel → 127.0.0.1:8788 on the Pi
+browser → https://threads.quarters.casa → Cloudflare edge (TLS, Access) → tunnel → 127.0.0.1:8788 on the Pi
 ```
 
 ## Before anything: the API is not read-only
@@ -96,19 +96,27 @@ threads-agent-publish.timer` is the off switch.
 
 ## The tunnel
 
-The hostname is `quarters.casa`, already on Cloudflare (nameservers
-`karl`/`maria.ns.cloudflare.com`). It currently resolves to a proxied record
-whose origin does not answer — Cloudflare returns **521**. Routing the tunnel
-must therefore _replace_ that record, which is what `--overwrite-dns` does; the
-command fails on an existing record without it.
+The dashboard is served at `threads.quarters.casa`. The zone is already on
+Cloudflare (nameservers `karl`/`maria.ns.cloudflare.com`).
+
+**The Pi already runs a tunnel, and it is not ours alone.** One `cloudflared`
+service (`/etc/cloudflared/config.yml`) carries `observer.`, `grafana.` and
+`mcp.quarters.casa` as well. So this is an *addition*, not an install:
+`cp`-ing `deploy/cloudflared/config.yml` over the live file takes those three
+offline. Add the ingress entry above the trailing `http_status:404` — the first
+matching rule wins.
+
+The apex `quarters.casa` is deliberately left alone: it resolves to a proxied
+record with no origin behind it and answers **521**. That is pre-existing and
+unrelated to this service.
 
 ```sh
-cloudflared tunnel login
-cloudflared tunnel create threads-agent
-cloudflared tunnel route dns --overwrite-dns threads-agent quarters.casa
-sudo cp deploy/cloudflared/config.yml /etc/cloudflared/config.yml
-# edit the tunnel id and the credentials path
-sudo cloudflared service install
+# as pi, not root: `cloudflared tunnel route dns` reads ~/.cloudflared/cert.pem,
+# and under sudo it looks in root's home and fails with "no file cert.pem"
+cloudflared tunnel route dns threads-agent threads.quarters.casa
+
+sudoedit /etc/cloudflared/config.yml   # add the ingress entry
+sudo systemctl restart cloudflared
 sudo systemctl status cloudflared
 ```
 
@@ -117,14 +125,14 @@ the origin is not, and a 502 means the tunnel reached the Pi and the Node
 service is down:
 
 ```sh
-curl -sI https://quarters.casa | head -3
+curl -sI https://threads.quarters.casa | head -3
 ```
 
 Then, in Cloudflare Zero Trust → Access → Applications, add a self-hosted
-application for `quarters.casa` and a policy limiting it to your own email. Do
-this **before** the tunnel goes live if the queue is not empty: between routing
-the DNS and adding the policy, the dashboard is reachable by anyone who knows
-the name, and only `THREADS_AGENT_TOKEN` stands in the way.
+application for `threads.quarters.casa` and a policy limiting it to your own
+email. Do this **before** the tunnel goes live if the queue is not empty:
+between routing the DNS and adding the policy, the dashboard is reachable by
+anyone who knows the name, and only `THREADS_AGENT_TOKEN` stands in the way.
 
 ## Notes for this setup
 
@@ -139,26 +147,33 @@ the name, and only `THREADS_AGENT_TOKEN` stands in the way.
   Nothing here logs or rate-limits by IP, so there is nothing to adjust — but do
   not start trusting `X-Forwarded-For` without stripping it at the edge first.
 - **Websockets are not used**, so no extra tunnel configuration is needed.
-- **`www.quarters.casa` is in the ingress but has no DNS record** until you route
-  one. Add it with `cloudflared tunnel route dns --overwrite-dns threads-agent
-www.quarters.casa`, or drop that block from the config.
-- **The apex is proxied**, so Cloudflare's own TLS certificate covers it. Nothing
-  on the Pi needs a certificate.
+- **The subdomain is proxied**, so Cloudflare's own TLS certificate covers it.
+  Nothing on the Pi needs a certificate.
+- **Port 8788, not 8787.** `claude-notify-server` (PM2) already holds 8787 on
+  loopback, and the second listener dies with `EADDRINUSE`.
 - **The legal pages stay on GitHub Pages, not on the Pi.** Meta needs the privacy
   and data-deletion URLs reachable at all times; a Pi at home is not. See the
   runbook below for putting them on a subdomain without taking them down.
-- **The OAuth redirect URI still points at GitHub Pages**
-  (`https://rayofgoodness.github.io/threads-agent/callback.html`). It can move to
-  `https://quarters.casa/callback.html` later, but only together with the
-  Redirect Callback URLs field in the Meta app — changing one side alone breaks
-  re-authorization. The legal pages Meta reviewed are in the same position.
+- **The OAuth redirect URI stays on GitHub Pages**
+  (`https://rayofgoodness.github.io/threads-agent/callback.html`) and must not
+  follow the dashboard onto `threads.quarters.casa`: that hostname now resolves
+  to the Pi, which is off half the time, and a redirect URI that answers 521
+  breaks re-authorization. Moving it anywhere requires changing the Redirect
+  Callback URLs field in the Meta app in the same step — one side alone breaks
+  it. The legal pages Meta reviewed are in the same position.
 - **Updating**: `git pull && npm ci && npm run build && sudo systemctl restart
 threads-agent`. The queue lives in `content/`, which is not touched by a pull
   unless you commit queue files.
 - **The Threads token expires every 60 days.** Refresh it before then and
   restart the service; the agent does not renew it on its own yet.
 
-## Runbook: moving the legal pages to `threads.quarters.casa`
+## Runbook: moving the legal pages to a subdomain
+
+> ⚠ **On hold: the hostname is taken.** This runbook was written for
+> `threads.quarters.casa`, which now points at the tunnel and serves the
+> dashboard. One name cannot be a `CNAME` to `rayofgoodness.github.io` and to
+> `<tunnel>.cfargotunnel.com` at once. Pick a different subdomain (`legal.`)
+> before following the steps, and substitute it everywhere below.
 
 They stay on GitHub Pages; only the hostname changes. **The order matters.**
 GitHub starts serving a `301` to the custom domain the moment it is configured,

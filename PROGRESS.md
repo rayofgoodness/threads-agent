@@ -57,11 +57,13 @@ Pages за адресою `rayofgoodness.github.io/threads-agent/`. Meta вим�
 доступними постійно, а домашній Pi вимикається — тоді privacy й data-deletion
 віддавали б 502.
 
-Дашборд буде на `https://quarters.casa` через Cloudflare Tunnel. Встановлення —
-`sudo bash deploy/install.sh` на самій малині, решта в `deploy/README.md`.
+Дашборд буде на `https://threads.quarters.casa` через Cloudflare Tunnel —
+піддомен уже наявного на малині тунелю, який поруч тримає `observer.`,
+`grafana.` і `mcp.`. Встановлення — `sudo bash deploy/install.sh` на самій
+малині, решта в `deploy/README.md`.
 
 Перенесення legal на піддомен описане runbook'ом у `deploy/README.md`, але
-відкладене. Порядок там не довільний: GitHub вмикає 301 на власний домен
+відкладене — і потребує іншого імені, бо `threads.` тепер зайнятий дашбордом. Порядок там не довільний: GitHub вмикає 301 на власний домен
 одразу, тож домен, заданий раніше за DNS-запис, кладе саме ті URL, що
 зареєстровані в Meta. Перевірено на практиці 19 серпня.
 
