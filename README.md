@@ -90,6 +90,16 @@ node scripts/agent.ts watch [--all]      # inbound replies, mentions, keywords
 `run` is dry unless you pass `--yes`. Slots, the daily cap, length bounds,
 banned phrases and watched keywords all come from `agent.config.json`.
 
+### Publishing on a schedule
+
+`scripts/publish-due.sh` runs the queue unattended — it resolves node itself and
+loads `.env`, so it works from launchd or cron where neither is inherited. The
+launchd template is in `scripts/launchd/`; install it by substituting `__REPO__`
+and bootstrapping it, and stop it with `launchctl bootout`. It checks every 15
+minutes and publishes only what is due, within the daily cap.
+
+While that job is loaded, queued posts go public without further review.
+
 ## What the Threads API will and will not do
 
 Findings from working against the live account, not guesses:

@@ -135,6 +135,30 @@ one blocked source does not hide the others. What each is worth today:
   account's own posts, which the monitor filters out as self-noise. Queries are
   single words — multi-word phrases match nothing rather than falling back to OR.
 
+### Scheduled publishing
+
+`scripts/publish-due.sh` is the entry point for launchd or cron: it resolves
+node (nvm puts it outside the PATH a job inherits), loads `.env`, runs
+`agent.ts run --yes`, and appends to `content/publish.log` — but only when
+something happened, since a quarter-hourly "nothing due" would bury the real
+entries.
+
+`scripts/launchd/com.casy.threads-agent.publish.plist` is a template; `__REPO__`
+is replaced at install time:
+
+```sh
+sed "s|__REPO__|$PWD|g" scripts/launchd/com.casy.threads-agent.publish.plist \
+  > ~/Library/LaunchAgents/com.casy.threads-agent.publish.plist
+launchctl bootstrap "gui/$UID" ~/Library/LaunchAgents/com.casy.threads-agent.publish.plist
+launchctl kickstart -p "gui/$UID/com.casy.threads-agent.publish"   # run once now
+launchctl bootout "gui/$UID/com.casy.threads-agent.publish"        # stop it
+```
+
+It fires every 15 minutes rather than at the configured slots: the queue decides
+what is due, the daily cap bounds it, and a machine asleep at 09:30 still
+publishes on waking. **While it is loaded, anything queued goes public without
+review** — `launchctl bootout` is the off switch.
+
 ### The API server
 
 `server/` puts the client behind same-origin JSON routes so the token stays out
