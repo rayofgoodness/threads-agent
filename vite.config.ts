@@ -10,6 +10,13 @@ export default defineConfig({
     vue(),
     vueDevTools(),
   ],
+  server: {
+    // Keeps the access token server-side: the app calls same-origin /api,
+    // which this proxy forwards to `npm run server`.
+    proxy: {
+      '/api': 'http://localhost:8787',
+    },
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

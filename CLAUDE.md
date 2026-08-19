@@ -25,11 +25,16 @@ Current state and open tasks: @PROGRESS.md
 - `npm run lint` — `eslint . --fix` (config in `eslint.config.ts`; `docs/` is ignored)
 - `npm run format` — Prettier over `src/` (no semicolons, single quotes, width 100)
 
+- `npm run server` — JSON API over the Threads client on port 8787 (`PORT` overrides).
+  It loads `.env` itself via `process.loadEnvFile`, so no `source` needed.
 - `node scripts/threads.ts <command>` — terminal access to the Threads client
   (`whoami`, `token`, `limits`, `posts`, `post`, `delete`, `insights`, `replies`).
   Needs `source .env` first. Node type-strips the `.ts` directly, no build step —
-  which is why imports under `src/threads/` and `scripts/` carry explicit `.ts`
-  extensions and both tsconfigs set `allowImportingTsExtensions`.
+  which is why imports under `src/threads/`, `scripts/` and `server/` carry
+  explicit `.ts` extensions and both tsconfigs set `allowImportingTsExtensions`.
+  Type stripping only erases; it cannot emit. Constructor parameter properties
+  (`constructor(readonly x: number)`), `enum` and `namespace` crash at load with
+  `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` — assign fields in the body instead.
 
 There is no test setup. Verification = `npm run type-check && npm run lint`.
 
@@ -89,12 +94,24 @@ token and Threads sends no CORS headers, so importing it into the Vue bundle
 would leak the secret and fail at runtime. Reach it from `scripts/` or a backend
 route, never from a component.
 
+### The API server
+
+`server/` puts the client behind same-origin JSON routes so the token stays out
+of the browser: `http.ts` is a small router plus the error mapping (Threads codes
+→ HTTP status: permission → 403, missing object → 404, quota → 429, anything
+else → 502), `index.ts` declares the routes. `vite.config.ts` proxies `/api` to
+port 8787 in development, so the Vue app calls `/api/...` with no CORS involved.
+
 ### Permissions
 
 The current token carries all 11 permissions the app has. `DELETE /v1.0/{id}`
 needs `threads_delete`; without it the API answers `code 10: Application does
 not have permission for this action` **after** the post is already public, and
 it then has to be removed by hand. Check scopes before any publish test.
+
+`/me/threads` lags a few seconds behind a delete — a just-removed post can still
+appear in the feed while `GET /{id}` already returns `code 100.33`. Trust the
+delete response, not an immediate re-list.
 
 Publishing is two calls: `POST /me/threads` (returns a creation id) then
 `POST /me/threads_publish` with `creation_id`. No delay is needed between them
