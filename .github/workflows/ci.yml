@@ -5,6 +5,9 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
+  # Manual re-deploy without an empty commit. Only users with write access can
+  # fire it, so it carries no fork risk — unlike pull_request.
+  workflow_dispatch:
 
 # A newer push makes an in-flight run pointless — except on master, where each
 # commit's result is worth keeping.
@@ -57,7 +60,9 @@ jobs:
   # repo is public and the runner's user has passwordless sudo.
   deploy:
     needs: check
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: >-
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && github.ref == 'refs/heads/master'
     runs-on: [self-hosted, threads-agent]
     timeout-minutes: 30
 

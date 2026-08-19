@@ -110,10 +110,17 @@ GitHub-hosted runners, and only then a `deploy` job lands on a self-hosted
 runner living on the Pi (`~/actions-runner-threads`, systemd unit
 `actions.runner.rayofgoodness-threads-agent.threads-rpi`, running as `pi`).
 
-That job is gated on `github.event_name == 'push'` for a reason: **the repo is
-public**, and a pull request from a fork must never execute on this machine. It
-also takes no `actions/checkout` — `install.sh` pulls into `/opt/threads-agent`
-itself, so the runner's own working copy never becomes a second source of truth.
+That job is gated on the event for a reason: **the repo is public**, and a pull
+request from a fork must never execute on this machine. It runs on `push` and on
+`workflow_dispatch` — the latter needs write access to fire, so it carries no
+fork risk and saves an empty commit when you just want to redeploy. Either way
+the branch must be `master`. It also takes no `actions/checkout` — `install.sh`
+pulls into `/opt/threads-agent` itself, so the runner's own working copy never
+becomes a second source of truth.
+
+Manual runs: *Actions → CI → Run workflow*, or on the Pi itself
+`sudo /opt/threads-agent/deploy/install.sh` (that exact path — the sudoers rule
+grants the script, not `bash`).
 
 The runner user's sudo is narrow — `/etc/sudoers.d/020_pi-deploy` grants
 passwordless root for the installer and nothing else:
