@@ -38,7 +38,7 @@ __screenshots__/
 # Vite
 *.timestamp-*-*.mjs
 
-.envcontent/monitor-state.json
+.env
+content/monitor-state.json
 content/publish.log
 content/launchd.*.log
-.env
