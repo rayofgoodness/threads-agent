@@ -13,7 +13,8 @@
     "format": "prettier --write src/",
     "server": "node server/index.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "lint:check": "eslint ."
   },
   "dependencies": {
     "vue": "^3.5.40"

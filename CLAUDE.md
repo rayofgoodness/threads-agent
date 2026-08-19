@@ -44,7 +44,11 @@ Current state and open tasks: @PROGRESS.md
   never touch the network: the Threads client takes an injected `fetchImpl`, and
   the agent modules take an injected client, so nothing reaches the real account.
 
-Verification = `npm test && npm run type-check && npm run lint`.
+Verification = `npm test && npm run type-check && npm run lint`. CI
+(`.github/workflows/ci.yml`) runs the same on Node 22 and 24, plus
+`npm run lint:check` (no `--fix`, so CI fails instead of quietly rewriting) and
+a smoke run of both CLIs — type stripping only breaks at load time, never at
+build.
 
 Node: `^22.18.0 || >=24.12.0` (enforced via `engines`).
 
