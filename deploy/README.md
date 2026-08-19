@@ -5,7 +5,7 @@ loopback; `cloudflared` dials out to Cloudflare and forwards the hostname to it.
 Nothing is port-forwarded, and the origin is never reachable directly.
 
 ```
-browser → Cloudflare edge (TLS, Access) → tunnel → 127.0.0.1:8787 on the Pi
+browser → https://quarters.casa → Cloudflare edge (TLS, Access) → tunnel → 127.0.0.1:8787 on the Pi
 ```
 
 ## Before anything: the API is not read-only
@@ -83,18 +83,35 @@ threads-agent-publish.timer` is the off switch.
 
 ## The tunnel
 
+The hostname is `quarters.casa`, already on Cloudflare (nameservers
+`karl`/`maria.ns.cloudflare.com`). It currently resolves to a proxied record
+whose origin does not answer — Cloudflare returns **521**. Routing the tunnel
+must therefore _replace_ that record, which is what `--overwrite-dns` does; the
+command fails on an existing record without it.
+
 ```sh
 cloudflared tunnel login
 cloudflared tunnel create threads-agent
-cloudflared tunnel route dns threads-agent threads.example.com
+cloudflared tunnel route dns --overwrite-dns threads-agent quarters.casa
 sudo cp deploy/cloudflared/config.yml /etc/cloudflared/config.yml
-# edit the tunnel id, credentials path and hostname
+# edit the tunnel id and the credentials path
 sudo cloudflared service install
 sudo systemctl status cloudflared
 ```
 
+Verify from outside the network — a 521 afterwards means the tunnel is up but
+the origin is not, and a 502 means the tunnel reached the Pi and the Node
+service is down:
+
+```sh
+curl -sI https://quarters.casa | head -3
+```
+
 Then, in Cloudflare Zero Trust → Access → Applications, add a self-hosted
-application for the hostname and a policy limiting it to your own email.
+application for `quarters.casa` and a policy limiting it to your own email. Do
+this **before** the tunnel goes live if the queue is not empty: between routing
+the DNS and adding the policy, the dashboard is reachable by anyone who knows
+the name, and only `THREADS_AGENT_TOKEN` stands in the way.
 
 ## Notes for this setup
 
@@ -109,6 +126,16 @@ application for the hostname and a policy limiting it to your own email.
   Nothing here logs or rate-limits by IP, so there is nothing to adjust — but do
   not start trusting `X-Forwarded-For` without stripping it at the edge first.
 - **Websockets are not used**, so no extra tunnel configuration is needed.
+- **`www.quarters.casa` is in the ingress but has no DNS record** until you route
+  one. Add it with `cloudflared tunnel route dns --overwrite-dns threads-agent
+www.quarters.casa`, or drop that block from the config.
+- **The apex is proxied**, so Cloudflare's own TLS certificate covers it. Nothing
+  on the Pi needs a certificate.
+- **The OAuth redirect URI still points at GitHub Pages**
+  (`https://rayofgoodness.github.io/threads-agent/callback.html`). It can move to
+  `https://quarters.casa/callback.html` later, but only together with the
+  Redirect Callback URLs field in the Meta app — changing one side alone breaks
+  re-authorization. The legal pages Meta reviewed are in the same position.
 - **Updating**: `git pull && npm ci && npm run build && sudo systemctl restart
 threads-agent`. The queue lives in `content/`, which is not touched by a pull
   unless you commit queue files.

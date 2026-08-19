@@ -169,7 +169,8 @@ review** — `launchctl bootout` is the off switch.
 `deploy/` holds the Raspberry Pi setup: systemd units for the server and the
 publish timer, a `cloudflared` tunnel config, and `deploy/README.md` with the
 steps. The shape is one Node process on loopback serving `/api` plus the built
-`dist/`, with Cloudflare reaching it through a tunnel.
+`dist/`, with Cloudflare reaching it through a tunnel at
+<https://quarters.casa>.
 
 Two environment variables matter there and nowhere else: `HOST` (default
 `127.0.0.1`) and `THREADS_AGENT_TOKEN`. The server refuses to bind a non-

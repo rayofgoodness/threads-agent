@@ -3,10 +3,14 @@
 #
 #   cloudflared tunnel login
 #   cloudflared tunnel create threads-agent
-#   cloudflared tunnel route dns threads-agent threads.example.com
+#   cloudflared tunnel route dns --overwrite-dns threads-agent quarters.casa
 #   sudo cloudflared service install
 #
-# Replace the tunnel id and hostname before use.
+# `--overwrite-dns` matters: quarters.casa already resolves to a proxied record
+# whose origin is down (Cloudflare answers 521). Routing the tunnel has to
+# replace that record, not sit beside it.
+#
+# Replace the tunnel id and the credentials path before use.
 
 tunnel: 00000000-0000-0000-0000-000000000000
 credentials-file: /etc/cloudflared/00000000-0000-0000-0000-000000000000.json
@@ -18,11 +22,17 @@ originRequest:
   keepAliveTimeout: 90s
 
 ingress:
-  - hostname: threads.example.com
+  - hostname: quarters.casa
     service: http://127.0.0.1:8787
     originRequest:
       # The dashboard and the API are the same origin; no host rewrite needed.
-      httpHostHeader: threads.example.com
+      httpHostHeader: quarters.casa
+
+  # The apex alone does not cover www; add the record only if you route it.
+  - hostname: www.quarters.casa
+    service: http://127.0.0.1:8787
+    originRequest:
+      httpHostHeader: quarters.casa
 
   # Everything unmatched is refused rather than proxied somewhere by accident.
   - service: http_status:404
