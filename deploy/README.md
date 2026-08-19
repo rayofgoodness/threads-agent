@@ -103,6 +103,62 @@ The timer replaces the launchd job used on macOS. **While it is enabled,
 anything in the queue goes public without review** — `systemctl disable --now
 threads-agent-publish.timer` is the off switch.
 
+## Continuous deployment
+
+A push to `master` deploys itself. `.github/workflows/ci.yml` runs the checks on
+GitHub-hosted runners, and only then a `deploy` job lands on a self-hosted
+runner living on the Pi (`~/actions-runner-threads`, systemd unit
+`actions.runner.rayofgoodness-threads-agent.threads-rpi`, running as `pi`).
+
+That job is gated on `github.event_name == 'push'` for a reason: **the repo is
+public**, and a pull request from a fork must never execute on this machine. It
+also takes no `actions/checkout` — `install.sh` pulls into `/opt/threads-agent`
+itself, so the runner's own working copy never becomes a second source of truth.
+
+The runner user's sudo is narrow — `/etc/sudoers.d/020_pi-deploy` grants
+passwordless root for the installer and nothing else:
+
+```sudoers
+pi ALL=(root) NOPASSWD: /opt/threads-agent/deploy/install.sh
+pi ALL=(root) NOPASSWD: /usr/bin/systemctl restart observer-api
+```
+
+The second line belongs to the unrelated `observer` runner on the same Pi;
+removing the broad `NOPASSWD: ALL` without it would have broken that deploy.
+Note the limit of this: `pi` is still in the `docker` group, which is
+root-equivalent, so this narrows the obvious path rather than sealing the box.
+
+Registering another runner needs a registration token from
+*Settings → Actions → Runners → New self-hosted runner*, then:
+
+```sh
+cd ~/actions-runner-threads
+./config.sh --url https://github.com/rayofgoodness/threads-agent \
+  --token <REGISTRATION_TOKEN> --name threads-rpi --labels threads-agent \
+  --work _work --unattended --replace
+sudo ./svc.sh install pi && sudo ./svc.sh start
+```
+
+## Postgres on the Pi
+
+Optional everywhere else, but it is running here:
+
+```sh
+sudo docker compose -f /opt/threads-agent/docker-compose.yml up -d
+sudo -u threads bash -c 'cd /opt/threads-agent && npm run db:migrate'
+```
+
+`POSTGRES_*` and `DATABASE_URL` go into `/opt/threads-agent/.env` with a
+generated password, not the `threads:threads` default from `.env.example` — the
+port is on loopback, but every process on the machine can reach it.
+
+The container runs under root and the service talks to it over TCP; `threads` is
+deliberately **not** in the `docker` group, since that group is root-equivalent
+and a Postgres client needs nothing of the sort. `restart: unless-stopped` brings
+it back after a reboot. `threads-agent.service` has no `After=docker.service`,
+so on boot the server may start first — `tryRecord` swallows the failure, and
+only the first few history writes are lost.
+
 ## The tunnel
 
 The dashboard is served at `threads.quarters.casa`. The zone is already on

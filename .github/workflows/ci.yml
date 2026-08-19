@@ -51,3 +51,18 @@ jobs:
           node scripts/threads.ts help
           node scripts/agent.ts help
           node scripts/agent.ts slots
+
+  # Deploy runs on the Pi itself, through a self-hosted runner. Gated on `push`
+  # to master so a pull request from a fork can never reach the machine — the
+  # repo is public and the runner's user has passwordless sudo.
+  deploy:
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: [self-hosted, threads-agent]
+    timeout-minutes: 30
+
+    steps:
+      # No checkout: install.sh pulls into /opt/threads-agent itself, so the
+      # runner's own working copy never becomes a second source of truth.
+      - name: Pull, rebuild and restart
+        run: sudo bash /opt/threads-agent/deploy/install.sh
