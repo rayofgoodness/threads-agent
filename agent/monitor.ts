@@ -50,7 +50,10 @@ function saveState(state: MonitorState, path = STATE_FILE) {
 function describe(error: unknown): string {
   if (!(error instanceof ThreadsApiError)) return String(error)
   if (error.code === 10) {
-    return 'рівень доступу застосунку не дозволяє — потрібен App Review'
+    // Reads like an access-level verdict and often is not: the same code comes
+    // back when the permission is simply absent from the use case, which is a
+    // checkbox in the App Dashboard rather than a review.
+    return 'застосунок не має дозволу — звірити Permissions and features у Use Case'
   }
   return error.message
 }
@@ -59,6 +62,11 @@ export interface MonitorOptions {
   client?: ThreadsClient
   /** Single keywords; multi-word terms match nothing in the Threads API. */
   keywords?: string[]
+  /**
+   * Whether to run the keyword channel. Off is a decision, not a failure: the
+   * channel is skipped silently and reports nothing at all.
+   */
+  keywordSearch?: boolean
   /** Report everything, not just what has not been seen before. */
   all?: boolean
   /** How many recent posts to read replies from. One API call per post. */
@@ -70,8 +78,9 @@ export interface MonitorOptions {
  * Collects inbound signals: replies to the account, mentions of it, and posts
  * matching the watched keywords.
  *
- * Channels fail independently — mentions being gated behind App Review must not
- * stop replies, which work on the default access level.
+ * Channels fail independently — one blocked source must not hide the others.
+ * A channel turned off in the config is a third state: not read, not reported,
+ * and absent from `unavailable`, which carries breakage and not choices.
  */
 export async function collectSignals(
   config: AgentConfig,
@@ -125,7 +134,10 @@ export async function collectSignals(
     unavailable.push({ source: 'mention', reason: describe(error) })
   }
 
-  for (const keyword of options.keywords ?? []) {
+  // `?? true` keeps a config written before this flag existed behaving as it
+  // did. Silence here is deliberate: an off channel is not an unavailable one.
+  const keywords = (options.keywordSearch ?? true) ? (options.keywords ?? []) : []
+  for (const keyword of keywords) {
     try {
       const hits = await client.keywordSearch(keyword, { type: 'RECENT', limit: 15 })
       for (const hit of hits.data) {

@@ -33,7 +33,7 @@ beforeEach(() => {
     guardrails: { maxLength: 100, minLength: 40, bannedPhrases: ['Не пропустіть'] },
     voice: defaultConfig().voice,
     generation: defaultConfig().generation,
-    monitor: { keywords: [] },
+    monitor: { keywords: [], keywordSearch: true },
   }
 })
 

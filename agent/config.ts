@@ -44,8 +44,19 @@ export interface AgentConfig {
   guardrails: { maxLength: number; minLength: number; bannedPhrases: string[] }
   voice: VoiceConfig
   generation: GenerationConfig
-  /** Single-word terms to watch. Threads matches no multi-word phrases. */
-  monitor: { keywords: string[] }
+  monitor: {
+    /** Single-word terms to watch. Threads matches no multi-word phrases. */
+    keywords: string[]
+    /**
+     * Whether to run keyword search at all. Off means the channel is not
+     * attempted and reports nothing — not that it failed. At the default
+     * access level the search only ever returns the account's own posts, and
+     * lifting that needs Advanced Access, which needs a verified company.
+     * With no legal entity behind the account that door does not open, so the
+     * honest state is «off», not «broken».
+     */
+    keywordSearch: boolean
+  }
 }
 
 const DEFAULTS: AgentConfig = {
@@ -71,7 +82,7 @@ const DEFAULTS: AgentConfig = {
     samples: [],
   },
   generation: { model: 'claude-opus-5', drafts: 3, effort: 'high' },
-  monitor: { keywords: [] },
+  monitor: { keywords: [], keywordSearch: true },
 }
 
 /**

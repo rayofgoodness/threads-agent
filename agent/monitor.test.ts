@@ -52,7 +52,7 @@ beforeEach(() => {
     guardrails: { maxLength: 500, minLength: 40, bannedPhrases: [] },
     voice: defaultConfig().voice,
     generation: defaultConfig().generation,
-    monitor: { keywords: ['casy'] },
+    monitor: { keywords: ['casy'], keywordSearch: true },
   }
 })
 
@@ -115,7 +115,7 @@ describe('collectSignals', () => {
 
     expect(report.signals).toHaveLength(1)
     expect(report.unavailable[0]?.source).toBe('mention')
-    expect(report.unavailable[0]?.reason).toContain('App Review')
+    expect(report.unavailable[0]?.reason).toContain('Permissions and features')
   })
 
   it('reports each signal once across runs, unless asked for all', async () => {
@@ -127,6 +127,46 @@ describe('collectSignals', () => {
     expect((await collectSignals(config, { client, statePath })).signals).toHaveLength(1)
     expect((await collectSignals(config, { client, statePath })).signals).toHaveLength(0)
     expect((await collectSignals(config, { client, statePath, all: true })).signals).toHaveLength(1)
+  })
+
+  it('does not call keyword search when the channel is off', async () => {
+    const client = fakeClient({
+      hits: { casy: [{ id: 'k1', username: 'salon_kyiv', text: 'Хтось користувався casy?' }] },
+    })
+
+    const report = await collectSignals(config, {
+      client,
+      keywords: ['casy'],
+      keywordSearch: false,
+      statePath,
+    })
+
+    expect(client.keywordSearch).not.toHaveBeenCalled()
+    expect(report.signals).toHaveLength(0)
+  })
+
+  it('keeps an off keyword channel out of unavailable, which is for breakage', async () => {
+    const client = fakeClient({ hits: {} })
+
+    const report = await collectSignals(config, {
+      client,
+      keywords: ['casy'],
+      keywordSearch: false,
+      statePath,
+    })
+
+    expect(report.unavailable.map((entry) => entry.source)).not.toContain('keyword')
+  })
+
+  it('searches when the flag is absent, so an older config behaves as before', async () => {
+    const client = fakeClient({
+      hits: { casy: [{ id: 'k1', username: 'salon_kyiv', text: 'про casy' }] },
+    })
+
+    const report = await collectSignals(config, { client, keywords: ['casy'], statePath })
+
+    expect(client.keywordSearch).toHaveBeenCalled()
+    expect(report.signals.map((signal) => signal.id)).toEqual(['k1'])
   })
 
   it('starts clean when the state file is corrupt', async () => {

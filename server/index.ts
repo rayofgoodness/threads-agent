@@ -133,6 +133,7 @@ router.get('/api/signals', async ({ query }) =>
   collectSignals(config, {
     client,
     keywords: config.monitor.keywords,
+    keywordSearch: config.monitor.keywordSearch,
     all: query.get('all') === '1',
   }),
 )

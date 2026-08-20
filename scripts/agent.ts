@@ -134,6 +134,7 @@ async function main() {
     case 'watch': {
       const report = await collectSignals(config, {
         keywords: config.monitor.keywords,
+        keywordSearch: config.monitor.keywordSearch,
         all: args.includes('--all'),
       })
 
