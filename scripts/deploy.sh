@@ -71,10 +71,18 @@ build() {
   npm run build
 }
 
-restart_and_check() {
+restart() {
   log "Рестарт $SERVICE"
-  sudo systemctl restart "$SERVICE"
+  # Окремо від health-check і з -n, щоб не висіти на запиті пароля: відмова
+  # sudo — це «немає права», а не «сервіс не піднявся». Зливати їх в одне
+  # означає відкочувати код у відповідь на проблему з sudoers.
+  sudo -n systemctl restart "$SERVICE" || die "не вдалося перезапустити $SERVICE.
+    Потрібен рядок у /etc/sudoers.d/020_pi-deploy:
+      pi ALL=(root) NOPASSWD: /usr/bin/systemctl restart $SERVICE
+    Його виписує sudo bash deploy/install.sh."
+}
 
+health_check() {
   # /api/* закритий Bearer-токеном, тож health-check несе його з .env.
   local token
   token="$(grep -E '^THREADS_AGENT_TOKEN=' "$APP_DIR/.env" | cut -d= -f2-)"
@@ -94,19 +102,27 @@ restart_and_check() {
 }
 
 build
+restart
 
-if restart_and_check; then
+if health_check; then
   log "Деплой успішний: $(git rev-parse --short HEAD)"
   exit 0
 fi
 
-# Білд пройшов, але новий код не піднявся — вертаємо прод на попередній коміт.
-printf '\n\033[1;31m!!! health-check провалився — відкочуюсь на %s\033[0m\n' "$PREV_SHA" >&2
 journalctl -u "$SERVICE" -n 40 --no-pager || true
 
+# Пересборка з того самого коміту нічого не полагодить, а git reset --hard на
+# HEAD створює хибне враження, що прод відкотили.
+if [[ "$NEW_SHA" == "$PREV_SHA" ]]; then
+  die "сервіс не пройшов health-check, і відкочуватись нема куди — коміт той самий ($PREV_SHA)"
+fi
+
+# Білд пройшов, але новий код не піднявся — вертаємо прод на попередній коміт.
+printf '\n\033[1;31m!!! health-check провалився — відкочуюсь на %s\033[0m\n' "$PREV_SHA" >&2
 git reset --hard "$PREV_SHA"
 build
-if restart_and_check; then
+restart
+if health_check; then
   die "деплой $NEW_SHA провалив health-check; прод відкочено на $PREV_SHA"
 fi
 
