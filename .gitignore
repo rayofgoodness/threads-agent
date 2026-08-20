@@ -42,3 +42,6 @@ __screenshots__/
 content/monitor-state.json
 content/publish.log
 content/launchd.*.log
+
+# impeccable working files
+.impeccable/
