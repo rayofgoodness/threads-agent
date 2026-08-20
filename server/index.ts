@@ -120,7 +120,13 @@ router.get('/api/posts/:id/replies', async ({ params, query }) =>
 )
 
 router.get('/api/insights', async ({ query }) =>
-  client.accountInsights(splitMetrics<AccountMetric>(query)),
+  client.accountInsights(splitMetrics<AccountMetric>(query), {
+    // Unix seconds, as the Graph API wants them. Passed through so the
+    // dashboard can ask for a week and for the week before it, which is the
+    // only way a number on screen gets to say whether it went up.
+    since: query.has('since') ? Number(query.get('since')) : undefined,
+    until: query.has('until') ? Number(query.get('until')) : undefined,
+  }),
 )
 
 router.get('/api/replies', async ({ query }) =>
@@ -141,6 +147,27 @@ router.get('/api/signals', async ({ query }) =>
 )
 
 /** Voice: the tone-of-voice block of `agent.config.json`. */
+/**
+ * The parts of `agent.config.json` the dashboard has to reason about.
+ *
+ * Not the whole file: the token-adjacent bits stay server-side, and the voice
+ * has its own route because it is editable and this one is not.
+ */
+router.get('/api/config', async () => {
+  const current = loadConfig()
+  return {
+    account: current.account,
+    timezone: current.timezone,
+    schedule: current.schedule,
+    guardrails: current.guardrails,
+    generation: { model: current.generation.model, drafts: current.generation.drafts },
+    monitor: {
+      keywords: current.monitor.keywords,
+      keywordSearch: current.monitor.keywordSearch,
+    },
+  }
+})
+
 router.get('/api/voice', async () => loadConfig().voice)
 
 router.put('/api/voice', async ({ body }) => saveVoice((await body()) as unknown as VoiceConfig))

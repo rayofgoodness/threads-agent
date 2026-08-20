@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { api, ApiError, type Generation } from '../api/client.ts'
+import { useDashboard } from '../composables/useDashboard.ts'
+import AppIcon from './AppIcon.vue'
 
 /**
  * Drafting. One button, one Anthropic call, nothing published.
@@ -9,7 +11,7 @@ import { api, ApiError, type Generation } from '../api/client.ts'
  * the last word is a human's, and forcing a queue-then-edit round trip through
  * the filesystem would make small fixes cost more than they should.
  */
-const emit = defineEmits<{ queued: []; kept: [] }>()
+const { settings, afterQueued, afterKept } = useDashboard()
 
 const MAX_LENGTH = 500
 
@@ -26,6 +28,7 @@ const settled = ref(new Map<number, 'queued' | 'kept'>())
 const busy = ref<number>()
 
 const drafts = computed(() => result.value?.drafts ?? [])
+const limit = computed(() => settings.data.value?.guardrails.maxLength ?? MAX_LENGTH)
 
 async function generate() {
   if (generating.value) return
@@ -68,12 +71,12 @@ async function act(index: number, where: 'queued' | 'kept') {
   try {
     if (where === 'queued') {
       await api.enqueue({ text, publishAt: result.value?.slots[index], ...provenance(index) })
+      await afterQueued()
     } else {
       await api.keepDraft({ text, topic: drafts.value[index]?.topic, ...provenance(index) })
+      await afterKept()
     }
     settled.value = new Map(settled.value).set(index, where)
-    if (where === 'queued') emit('queued')
-    else emit('kept')
   } catch (cause) {
     error.value = cause instanceof ApiError ? cause.message : String(cause)
   } finally {
@@ -89,72 +92,90 @@ function slotLabel(index: number): string {
 </script>
 
 <template>
-  <section class="card" aria-labelledby="generator-heading">
-    <h2 id="generator-heading">Генерація</h2>
-    <p class="small muted">
-      Пише за голосом і контент-планом. Нічого не публікує — чернетки йдуть у чергу вручну.
-    </p>
-
-    <label>
-      Завдання на цю генерацію — необовʼязково
-      <textarea
-        v-model="brief"
-        rows="2"
-        :disabled="generating"
-        placeholder="Напр.: про те, що клієнтки пишуть о 23:00, а відповідь чекають зранку"
-      ></textarea>
-    </label>
-
-    <div class="row">
-      <label class="count">
-        Варіантів
-        <input v-model.number="count" type="number" min="1" max="5" :disabled="generating" />
-      </label>
-      <button class="primary" :disabled="generating" @click="generate">
-        {{ generating ? 'Пишу…' : 'Згенерувати' }}
-      </button>
+  <section class="panel" aria-labelledby="generator-heading">
+    <div class="panel-head">
+      <h2 id="generator-heading">Генерація</h2>
+      <p v-if="settings.data.value" class="tiny faint spread">
+        {{ settings.data.value.generation.model }}
+      </p>
     </div>
 
-    <p v-if="error" class="error small" role="alert">{{ error }}</p>
+    <div class="panel-body form">
+      <p class="small muted">
+        Пише за голосом і контент-планом. Нічого не публікує: варіант іде або на полицю без слоту,
+        або в чергу — і це два різні кліки.
+      </p>
 
-    <p v-if="result" class="small muted" role="status">
-      {{ result.model }} · {{ result.usage.input }}→{{ result.usage.output }} токенів<template
-        v-if="result.usage.cached"
-      >
-        · {{ result.usage.cached }} з кешу</template
-      ><template v-if="result.id === null"> · без бази, історія не збережена</template>
-    </p>
+      <label>
+        Завдання на цю генерацію — необовʼязково
+        <textarea
+          v-model="brief"
+          rows="2"
+          :disabled="generating"
+          placeholder="Напр.: про те, що клієнтки пишуть о 23:00, а відповідь чекають зранку"
+        ></textarea>
+      </label>
+
+      <div class="row">
+        <label class="count">
+          Варіантів
+          <input v-model.number="count" type="number" min="1" max="5" :disabled="generating" />
+        </label>
+        <button class="primary spread" :disabled="generating" @click="generate">
+          <AppIcon name="spark" />
+          {{ generating ? 'Пишу…' : 'Згенерувати' }}
+        </button>
+      </div>
+
+      <p v-if="error" class="error small" role="alert">{{ error }}</p>
+
+      <p v-if="result" class="tiny faint num" role="status">
+        {{ result.usage.input }}→{{ result.usage.output }} токенів<template
+          v-if="result.usage.cached"
+        >
+          · {{ result.usage.cached }} з кешу</template
+        ><template v-if="result.id === null"> · без бази, історія не збережена</template>
+      </p>
+    </div>
 
     <ol v-if="drafts.length" class="drafts">
       <li v-for="(draft, index) in drafts" :key="index">
         <div class="head">
-          <strong>{{ draft.topic }}</strong>
-          <span class="small muted">{{ slotLabel(index) }}</span>
+          <strong class="small">{{ draft.topic }}</strong>
+          <span v-if="slotLabel(index)" class="tiny faint num spread">
+            <AppIcon name="clock" :size="12" />
+            {{ slotLabel(index) }}
+          </span>
         </div>
-        <p class="small muted note">{{ draft.note }}</p>
+
+        <p v-if="draft.note" class="tiny faint note">{{ draft.note }}</p>
 
         <textarea v-model="texts[index]" :aria-label="`Текст варіанта ${index + 1}`"></textarea>
 
+        <p v-for="violation in draft.violations" :key="violation.rule" class="error tiny">
+          <AppIcon name="alert" :size="12" />
+          {{ violation.detail }}
+        </p>
+
         <div class="row actions">
-          <span
-            class="small"
-            :class="(texts[index]?.length ?? 0) > MAX_LENGTH ? 'error' : 'muted'"
-          >
-            {{ texts[index]?.length ?? 0 }} / {{ MAX_LENGTH }}
+          <span class="tiny num" :class="(texts[index]?.length ?? 0) > limit ? 'error' : 'faint'">
+            {{ texts[index]?.length ?? 0 }} / {{ limit }}
           </span>
-          <!-- Keeping is the softer of the two and comes first: a draft on the
-               shelf has no slot and cannot publish, so it is the safe default
-               for anything that still needs work. -->
+          <!-- Keeping comes first because it is the softer of the two: a draft
+               on the shelf has no slot and cannot publish, so it is the safe
+               destination for anything that still needs work. -->
           <button
+            class="spread"
             :disabled="settled.has(index) || busy !== undefined"
             @click="act(index, 'kept')"
           >
+            <AppIcon name="shelf" />
             {{
               settled.get(index) === 'kept'
-                ? 'У чернетках'
+                ? 'На полиці'
                 : busy === index
                   ? 'Зберігаю…'
-                  : 'У чернетки'
+                  : 'На полицю'
             }}
           </button>
           <button
@@ -162,80 +183,70 @@ function slotLabel(index: number): string {
             :disabled="settled.has(index) || busy !== undefined"
             @click="act(index, 'queued')"
           >
+            <AppIcon name="clock" />
             {{ settled.get(index) === 'queued' ? 'У черзі' : 'У чергу' }}
           </button>
         </div>
-
-        <p v-for="violation in draft.violations" :key="violation.rule" class="error small">
-          {{ violation.detail }}
-        </p>
       </li>
     </ol>
   </section>
 </template>
 
 <style scoped>
-h2 {
-  font-size: 1rem;
-}
-
-label {
-  margin-block-start: 0.85rem;
-}
-
-label textarea {
-  min-block-size: 3lh;
-}
-
-.row {
-  display: flex;
-  align-items: safe end;
-  gap: 1rem;
-  margin-block-start: 0.75rem;
-}
-
-.row button {
-  margin-inline-start: auto;
-}
-
-/* Two buttons here, so only the first one takes the free space. */
-.actions button + button {
-  margin-inline-start: 0;
+.form {
+  display: grid;
+  gap: var(--s-4);
 }
 
 .count {
   inline-size: 6rem;
 }
 
+.count input {
+  font-variant-numeric: tabular-nums;
+}
+
+.row {
+  align-items: end;
+}
+
 .drafts {
   list-style: none;
-  margin: 1rem 0 0;
+  margin: 0;
   padding: 0;
-  display: grid;
-  gap: 1rem;
 }
 
 .drafts li {
+  display: grid;
+  gap: var(--s-2);
+  padding: var(--s-4) var(--s-5);
   border-block-start: 1px solid var(--border);
-  padding-block-start: 0.85rem;
 }
 
 .head {
   display: flex;
-  align-items: safe center;
-  gap: 1rem;
+  align-items: baseline;
+  gap: var(--s-3);
 }
 
 .head span {
-  margin-inline-start: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   white-space: nowrap;
 }
 
 .note {
-  margin-block: 0.25rem 0.6rem;
+  margin-block-start: -0.25rem;
 }
 
-p {
-  margin-block: 0.6rem 0;
+.error {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.actions {
+  align-items: center;
 }
 </style>

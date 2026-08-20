@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { api, ApiError, type QueueItem } from '../api/client.ts'
-import { useResource } from '../composables/useResource.ts'
-import StatusLine from './StatusLine.vue'
+import { useDashboard } from '../composables/useDashboard.ts'
+import AppIcon from './AppIcon.vue'
 
 /**
  * The draft shelf: kept texts with no slot.
@@ -10,22 +10,18 @@ import StatusLine from './StatusLine.vue'
  * Nothing here can publish — that is the whole point of the shelf. Scheduling
  * is the one door out of it, and it is a separate, deliberate click.
  */
-const emit = defineEmits<{ scheduled: [] }>()
-
-const MAX_LENGTH = 500
-
-const drafts = useResource(api.drafts)
+const { drafts, shelf, settings, afterScheduled } = useDashboard()
 
 /** Edits by file name, so a refresh does not throw away what is being typed. */
 const edits = ref(new Map<string, string>())
 const busy = ref<string>()
 const error = ref<string>()
 
-const items = computed(() => drafts.data.value ?? [])
+const limit = computed(() => settings.data.value?.guardrails.maxLength ?? 500)
 
 // A draft the server no longer has cannot be edited; drop its buffer so a
 // deleted item does not keep text alive forever.
-watch(items, (value) => {
+watch(shelf, (value) => {
   const alive = new Set(value.map((item) => item.file))
   for (const file of edits.value.keys()) if (!alive.has(file)) edits.value.delete(file)
 })
@@ -63,35 +59,37 @@ const schedule = (item: QueueItem) =>
     // version still on disk.
     if (changed(item)) await api.updateDraft(item.file, textOf(item))
     await api.scheduleDraft(item.file)
-    emit('scheduled')
+    await afterScheduled()
   })
 
 const drop = (item: QueueItem) => run(item.file, () => api.dropDraft(item.file))
-
-defineExpose({ refresh: drafts.refresh })
 </script>
 
 <template>
-  <section class="card" aria-labelledby="drafts-heading">
-    <div class="head">
-      <h2 id="drafts-heading">Чернетки</h2>
-      <button :disabled="drafts.pending.value" @click="drafts.refresh">Оновити</button>
+  <section class="panel" aria-labelledby="shelf-heading">
+    <div class="panel-head">
+      <h2 id="shelf-heading">Полиця</h2>
+      <p class="tiny faint spread num">{{ shelf.length }} без слоту</p>
     </div>
 
-    <StatusLine
-      :error="drafts.error.value"
-      :pending="drafts.pending.value && !drafts.loaded.value"
-    />
-
-    <p v-if="drafts.loaded.value && !items.length" class="small muted">
-      Порожньо. Згенеровані пости можна зберегти сюди — вони чекатимуть без слоту.
+    <p v-if="drafts.error.value" class="panel-body error small" role="alert">
+      {{ drafts.error.value }}
     </p>
 
-    <p v-if="error" class="error small" role="alert">{{ error }}</p>
+    <p v-else-if="drafts.pending.value && !drafts.loaded.value" class="panel-body muted small">
+      Читаю полицю…
+    </p>
 
-    <ul>
-      <li v-for="item in items" :key="item.file">
-        <p v-if="item.topic" class="small muted topic">{{ item.topic }}</p>
+    <p v-else-if="!shelf.length" class="panel-body muted small">
+      Порожньо. Згенерований варіант можна відкласти сюди — він чекатиме без слоту й ніколи не
+      опублікується сам.
+    </p>
+
+    <p v-if="error" class="panel-body error small" role="alert">{{ error }}</p>
+
+    <ul v-if="shelf.length" class="items">
+      <li v-for="item in shelf" :key="item.file">
+        <p v-if="item.topic" class="tiny faint">{{ item.topic }}</p>
 
         <textarea
           :value="textOf(item)"
@@ -101,17 +99,34 @@ defineExpose({ refresh: drafts.refresh })
         ></textarea>
 
         <div class="row">
-          <span class="small" :class="textOf(item).length > MAX_LENGTH ? 'error' : 'muted'">
-            {{ textOf(item).length }} / {{ MAX_LENGTH }}
+          <span class="tiny num" :class="textOf(item).length > limit ? 'error' : 'faint'">
+            {{ textOf(item).length }} / {{ limit }}
           </span>
-          <button v-if="changed(item)" :disabled="busy === item.file" @click="save(item)">
+          <button
+            v-if="changed(item)"
+            class="spread"
+            :disabled="busy === item.file"
+            @click="save(item)"
+          >
+            <AppIcon name="check" />
             Зберегти
           </button>
-          <button class="primary" :disabled="busy === item.file" @click="schedule(item)">
+          <button
+            class="primary"
+            :class="{ spread: !changed(item) }"
+            :disabled="busy === item.file"
+            @click="schedule(item)"
+          >
+            <AppIcon name="clock" />
             У чергу
           </button>
-          <button class="danger" :disabled="busy === item.file" @click="drop(item)">
-            Видалити
+          <button
+            class="danger"
+            :disabled="busy === item.file"
+            :aria-label="`Видалити чернетку ${item.file}`"
+            @click="drop(item)"
+          >
+            <AppIcon name="trash" />
           </button>
         </div>
       </li>
@@ -120,59 +135,20 @@ defineExpose({ refresh: drafts.refresh })
 </template>
 
 <style scoped>
-h2 {
-  font-size: 1rem;
-}
-
-.head {
-  display: flex;
-  align-items: safe center;
-  gap: 1rem;
-  margin-block-end: 0.75rem;
-}
-
-.head button {
-  margin-inline-start: auto;
-}
-
-ul {
+.items {
   list-style: none;
   margin: 0;
   padding: 0;
+}
+
+.items li {
   display: grid;
-  gap: 1rem;
-}
-
-li {
+  gap: var(--s-2);
+  padding: var(--s-4) var(--s-5);
   border-block-start: 1px solid var(--border);
-  padding-block-start: 0.85rem;
 }
 
-li:first-child {
+.items li:first-child {
   border-block-start: none;
-  padding-block-start: 0;
-}
-
-.topic {
-  margin-block: 0 0.4rem;
-}
-
-textarea {
-  min-block-size: 4lh;
-}
-
-.row {
-  display: flex;
-  align-items: safe center;
-  gap: 0.5rem;
-  margin-block-start: 0.5rem;
-}
-
-.row span {
-  margin-inline-end: auto;
-}
-
-p {
-  margin-block: 0.5rem 0;
 }
 </style>

@@ -2,7 +2,7 @@
 import { ref, watch } from 'vue'
 import { api, ApiError, type Voice } from '../api/client.ts'
 import { useResource } from '../composables/useResource.ts'
-import StatusLine from './StatusLine.vue'
+import AppIcon from './AppIcon.vue'
 
 /**
  * Tone of voice — what the generator writes from.
@@ -19,7 +19,7 @@ const saved = ref(false)
 const error = ref<string>()
 
 // The form is a local copy: editing must not mutate the loaded value, or a
-// failed save would leave the card showing changes that never reached disk.
+// failed save would leave the panel showing changes that never reached disk.
 watch(loaded.data, (value) => {
   if (value) draft.value = structuredClone(value)
 })
@@ -33,6 +33,7 @@ const parse = (value: string) =>
 
 function edit<K extends keyof Voice>(key: K, value: Voice[K]) {
   if (draft.value) draft.value[key] = value
+  saved.value = false
 }
 
 async function save() {
@@ -52,13 +53,19 @@ async function save() {
 </script>
 
 <template>
-  <section class="card" aria-labelledby="voice-heading">
-    <h2 id="voice-heading">Голос</h2>
-    <p class="small muted">Як звучить акаунт. Це йде в кожну генерацію.</p>
+  <section class="panel" aria-labelledby="voice-heading">
+    <div class="panel-head">
+      <h2 id="voice-heading">Голос</h2>
+      <p class="tiny faint spread">іде в кожну генерацію</p>
+    </div>
 
-    <StatusLine :error="loaded.error.value" :pending="loaded.pending.value && !loaded.loaded.value" />
+    <p v-if="loaded.error.value" class="panel-body error small" role="alert">
+      {{ loaded.error.value }}
+    </p>
 
-    <div v-if="draft" class="fields">
+    <p v-else-if="!draft" class="panel-body muted small">Читаю голос…</p>
+
+    <div v-else class="panel-body fields">
       <label>
         Хто говорить
         <textarea
@@ -133,49 +140,31 @@ async function save() {
       </label>
 
       <div class="row">
-        <span v-if="saved" class="small muted" role="status">Збережено в agent.config.json</span>
-        <button class="primary" :disabled="saving" @click="save">
+        <span v-if="saved" class="tiny muted" role="status">Записано в agent.config.json</span>
+        <button class="primary spread" :disabled="saving" @click="save">
+          <AppIcon name="check" />
           {{ saving ? 'Зберігаю…' : 'Зберегти' }}
         </button>
       </div>
 
-      <p v-if="error" class="error small" role="alert">{{ error }}</p>
+      <p v-if="error" class="small error" role="alert">{{ error }}</p>
     </div>
   </section>
 </template>
 
 <style scoped>
-h2 {
-  font-size: 1rem;
-}
-
 .fields {
   display: grid;
-  gap: 0.85rem;
-  margin-block-start: 0.85rem;
+  gap: var(--s-4);
 }
 
 .pair {
   display: grid;
-  gap: 0.85rem;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: var(--s-4);
 }
 
 .fields textarea {
   min-block-size: 3lh;
-}
-
-.row {
-  display: flex;
-  align-items: safe center;
-  gap: 1rem;
-}
-
-.row button {
-  margin-inline-start: auto;
-}
-
-p {
-  margin-block: 0.4rem 0;
 }
 </style>

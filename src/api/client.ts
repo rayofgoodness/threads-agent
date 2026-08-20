@@ -113,6 +113,36 @@ export interface GenerationRecord {
   }[]
 }
 
+/** One stored reading of a post's numbers. The curve is many of these. */
+export interface MetricSample {
+  postId: string
+  capturedAt: string
+  views: number | null
+  likes: number | null
+  replies: number | null
+  reposts: number | null
+  quotes: number | null
+}
+
+export interface CollectReport {
+  at: string
+  enabled: boolean
+  considered: number
+  captured: string[]
+  skipped: number
+  failed: { postId: string; reason: string }[]
+}
+
+/** The read-only parts of `agent.config.json` the dashboard reasons about. */
+export interface AgentSettings {
+  account: string
+  timezone: string
+  schedule: { slots: string[]; maxPerDay: number }
+  guardrails: { maxLength: number; minLength: number; bannedPhrases: string[] }
+  generation: { model: string; drafts: number }
+  monitor: { keywords: string[]; keywordSearch: boolean }
+}
+
 export interface TokenStatus {
   valid: boolean
   expiresAt: string | null
@@ -179,7 +209,14 @@ export const api = {
   profile: () => request<ThreadsProfile>('/profile'),
   token: () => request<TokenStatus>('/token'),
   limits: () => request<PublishingLimit | undefined>('/limits'),
-  insights: () => request<InsightMetric[]>('/insights'),
+  settings: () => request<AgentSettings>('/config'),
+  insights: (range?: { since?: number; until?: number }) => {
+    const query = new URLSearchParams()
+    if (range?.since) query.set('since', String(range.since))
+    if (range?.until) query.set('until', String(range.until))
+    const suffix = query.size ? `?${query}` : ''
+    return request<InsightMetric[]>(`/insights${suffix}`)
+  },
   posts: (limit = 25) => request<Paged<ThreadsPost>>(`/posts?limit=${limit}`),
   postInsights: (id: string) => request<InsightMetric[]>(`/posts/${id}/insights`),
   replies: (id: string) => request<Paged<ThreadsReply>>(`/posts/${id}/replies`),
@@ -225,6 +262,16 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ publishAt }),
     }),
+
+  /** Stored readings for a set of posts, oldest first, in one call. */
+  metricSeries: (ids: string[]) =>
+    ids.length
+      ? request<Record<string, MetricSample[]>>(
+          `/metrics/series?ids=${encodeURIComponent(ids.join(','))}`,
+        )
+      : Promise.resolve({} as Record<string, MetricSample[]>),
+  /** Takes the readings that are due. The cadence, not this call, decides. */
+  collectMetrics: () => request<CollectReport>('/metrics/collect', { method: 'POST' }),
 
   /** Past generations. Empty without a database — the history is optional. */
   generations: (limit = 20) => request<GenerationRecord[]>(`/generations?limit=${limit}`),

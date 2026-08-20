@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { api, ApiError } from '../api/client.ts'
 import type { InsightMetric, ThreadsPost } from '../threads/types.ts'
+import AppIcon from './AppIcon.vue'
 
 const props = defineProps<{ post: ThreadsPost; canDelete: boolean }>()
 const emit = defineEmits<{ deleted: [id: string] }>()
@@ -59,39 +60,50 @@ async function remove() {
 </script>
 
 <template>
-  <article class="card post">
+  <article class="post">
     <header>
-      <time v-if="post.timestamp" class="muted small" :datetime="post.timestamp">
+      <time v-if="post.timestamp" class="tiny faint num" :datetime="post.timestamp">
         {{ formatted(post.timestamp) }}
       </time>
-      <span class="muted small type">{{ post.media_type }}</span>
+      <span v-if="post.media_type && post.media_type !== 'TEXT_POST'" class="tiny faint">
+        {{ post.media_type }}
+      </span>
     </header>
 
     <p class="text">{{ post.text || '(без тексту)' }}</p>
 
-    <ul v-if="metrics" class="metrics small">
-      <li v-for="metric in metrics" :key="metric.name">
-        <strong>{{ metric.values?.[0]?.value ?? metric.total_value?.value ?? 0 }}</strong>
-        {{ METRIC_LABELS[metric.name] ?? metric.name }}
-      </li>
-    </ul>
+    <dl v-if="metrics" class="metrics">
+      <div v-for="metric in metrics" :key="metric.name">
+        <dt class="tiny faint">{{ METRIC_LABELS[metric.name] ?? metric.name }}</dt>
+        <dd class="num">{{ metric.values?.[0]?.value ?? metric.total_value?.value ?? 0 }}</dd>
+      </div>
+    </dl>
 
-    <p v-if="error" class="error small" role="alert">{{ error }}</p>
+    <p v-if="error" class="tiny error" role="alert">{{ error }}</p>
 
     <footer>
-      <a v-if="post.permalink" :href="post.permalink" target="_blank" rel="noreferrer noopener">
+      <a
+        v-if="post.permalink"
+        class="tiny"
+        :href="post.permalink"
+        target="_blank"
+        rel="noreferrer noopener"
+      >
+        <AppIcon name="external" :size="13" />
         Відкрити
       </a>
-      <button v-if="!metrics" :disabled="metricsPending" @click="loadMetrics">
+      <button v-if="!metrics" class="quiet" :disabled="metricsPending" @click="loadMetrics">
+        <AppIcon name="chart" :size="13" />
         {{ metricsPending ? 'Рахую…' : 'Метрики' }}
       </button>
       <button
         v-if="canDelete"
-        class="danger"
+        class="danger spread"
         :disabled="deleting"
         @click="remove"
         @blur="confirming = false"
       >
+        <AppIcon name="trash" :size="13" />
         {{ deleting ? 'Видаляю…' : confirming ? 'Точно видалити?' : 'Видалити' }}
       </button>
     </footer>
@@ -101,53 +113,61 @@ async function remove() {
 <style scoped>
 .post {
   display: grid;
-  gap: 0.6rem;
+  gap: var(--s-2);
+  padding: var(--s-4) var(--s-5);
+  border-block-start: 1px solid var(--border);
 }
 
 header {
   display: flex;
-  gap: 0.75rem;
   align-items: baseline;
+  gap: var(--s-3);
 }
 
-.type {
+header span:last-child {
   margin-inline-start: auto;
 }
 
 .text {
-  margin: 0;
+  font-size: var(--fs-body);
+  line-height: 1.55;
   white-space: pre-wrap;
   /* Post bodies can carry unbroken URLs. */
   overflow-wrap: anywhere;
   text-wrap: pretty;
+  max-inline-size: 68ch;
 }
 
 .metrics {
   display: flex;
   flex-flow: row wrap;
-  gap: 0.35rem 1rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  color: var(--muted);
+  gap: var(--s-2) var(--s-5);
+  margin: var(--s-1) 0 0;
+  padding: var(--s-3) 0 0;
+  border-block-start: 1px solid var(--border);
 }
 
-.metrics strong {
-  color: var(--fg);
-  font-variant-numeric: tabular-nums;
+.metrics div {
+  display: grid;
+}
+
+.metrics dd {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  line-height: 1.2;
 }
 
 footer {
   display: flex;
-  align-items: safe center;
-  gap: 0.5rem;
+  align-items: center;
+  gap: var(--s-3);
+  margin-block-start: var(--s-1);
 }
 
-footer button:last-child {
-  margin-inline-start: auto;
-}
-
-p.error {
-  margin: 0;
+footer a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 </style>
