@@ -6,20 +6,21 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=threads
-Group=threads
-WorkingDirectory=/opt/threads-agent
-EnvironmentFile=/opt/threads-agent/.env
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/Projects/threads-agent
+EnvironmentFile=/home/pi/Projects/threads-agent/.env
 
 # The wrapper resolves node and loads .env itself, which matters under cron;
 # systemd already provides both, so it costs nothing and keeps one entry point.
 Environment=THREADS_AGENT_NODE=/usr/bin/node
-ExecStart=/opt/threads-agent/scripts/publish-due.sh
+ExecStart=/home/pi/Projects/threads-agent/scripts/publish-due.sh
 
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/opt/threads-agent/content
+# Off because the deployment lives under /home; see threads-agent.service.
+ProtectHome=false
+ReadWritePaths=/home/pi/Projects/threads-agent/content
 
 SyslogIdentifier=threads-agent-publish

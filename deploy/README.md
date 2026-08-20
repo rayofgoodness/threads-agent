@@ -37,14 +37,31 @@ and neither is optional once the host is on the internet:
   sudo timedatectl set-timezone Europe/Kyiv
   ```
 
+## Where it lives
+
+`/home/pi/Projects/threads-agent`, running as `pi` — the same layout as the
+other projects on this Pi (`observer-app`, `foodie`). The working copy and
+production are one tree: the deploy pulls into it and builds in place.
+
+That is a deliberate trade, not an accident. It costs the isolation a dedicated
+service user would give (the agent's token is readable by `pi`, which is also
+the login account), and it buys one obvious location per project, one `.env`,
+and a deploy that behaves the same in every repo on the machine. The guard that
+replaces the isolation is in `scripts/deploy.sh`: it refuses to run while the
+tree has uncommitted changes, so an automatic deploy can never overwrite work in
+progress.
+
 ## Install
 
-One command does all of it — user, clone, dependencies, build, systemd units —
-and is safe to re-run after a `git pull`:
+One command does all of it — clone, dependencies, build, systemd units, the
+sudoers rule — and is safe to re-run:
 
 ```sh
 sudo bash deploy/install.sh
 ```
+
+It is *setup*, not deploy. Deploying is `scripts/deploy.sh`, which needs no root
+at all.
 
 On the first run it writes an `.env` skeleton with a generated
 `THREADS_AGENT_TOKEN` and stops, so the services never start without the Threads
@@ -53,14 +70,13 @@ credentials. Fill it in, then enable them.
 The manual equivalent, if you would rather see each step:
 
 ```sh
-sudo useradd --system --create-home --home-dir /opt/threads-agent threads
-sudo -u threads git clone https://github.com/rayofgoodness/threads-agent.git /opt/threads-agent
-cd /opt/threads-agent
-sudo -u threads npm ci
-sudo -u threads npm run build      # produces dist/, which the server serves
+git clone https://github.com/rayofgoodness/threads-agent.git ~/Projects/threads-agent
+cd ~/Projects/threads-agent
+npm ci
+npm run build      # produces dist/, which the server serves
 ```
 
-Create `/opt/threads-agent/.env` (owned by `threads`, mode `0600`):
+Create `~/Projects/threads-agent/.env` (mode `0600`):
 
 ```sh
 THREADS_ACCESS_TOKEN=...
@@ -79,25 +95,29 @@ Postgres із `docker-compose.yml` на малину не їде за замов
 `DATABASE_URL` сервер просто не веде історію.
 
 ```sh
-sudo chown threads:threads /opt/threads-agent/.env
-sudo chmod 600 /opt/threads-agent/.env
+chmod 600 ~/Projects/threads-agent/.env
 ```
 
 ## Services
 
 ```sh
-sudo cp deploy/systemd/threads-agent.service /etc/systemd/system/
-sudo cp deploy/systemd/threads-agent-publish.service /etc/systemd/system/
-sudo cp deploy/systemd/threads-agent-publish.timer /etc/systemd/system/
+sudo cp deploy/systemd/threads-agent*.service /etc/systemd/system/
+sudo cp deploy/systemd/threads-agent*.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 
 sudo systemctl enable --now threads-agent.service          # API + dashboard
 sudo systemctl enable --now threads-agent-publish.timer    # queue, every 15 min
+sudo systemctl enable --now threads-agent-metrics.timer    # post readings, hourly
 
 systemctl status threads-agent
-systemctl list-timers threads-agent-publish
+systemctl list-timers 'threads-agent-*'
 journalctl -u threads-agent -f
 ```
+
+Note `ProtectHome=false` in the units. It has to be off: the deployment is under
+`/home`, and `ProtectHome=true` would hide the working directory from the very
+process that serves it. The rest of the hardening (`ProtectSystem=strict`,
+`NoNewPrivileges`, `ReadWritePaths` limited to `content/`) still applies.
 
 The timer replaces the launchd job used on macOS. **While it is enabled,
 anything in the queue goes public without review** — `systemctl disable --now
@@ -114,24 +134,36 @@ That job is gated on the event for a reason: **the repo is public**, and a pull
 request from a fork must never execute on this machine. It runs on `push` and on
 `workflow_dispatch` — the latter needs write access to fire, so it carries no
 fork risk and saves an empty commit when you just want to redeploy. Either way
-the branch must be `master`. It also takes no `actions/checkout` — `install.sh`
-pulls into `/opt/threads-agent` itself, so the runner's own working copy never
-becomes a second source of truth.
+the branch must be `master`.
+
+The job checks out only to get `scripts/deploy.sh` itself, so the deploy runs at
+the version that arrived in this commit; the production tree is updated by that
+script's own `git fetch` + `merge --ff-only` into `APP_DIR`. Same shape as
+`observer-app` and `foodie`.
+
+What `scripts/deploy.sh` does, in order: refuse if the tree is dirty, fast-
+forward to `origin/master`, `npm ci`, `npm test`, `npm run build`, restart the
+unit, then poll `/api/health` for up to a minute. If health never comes up it
+resets to the previous commit, rebuilds and restarts — a failed deploy leaves
+the last working version running rather than a dead service.
 
 Manual runs: *Actions → CI → Run workflow*, or on the Pi itself
-`sudo /opt/threads-agent/deploy/install.sh` (that exact path — the sudoers rule
-grants the script, not `bash`).
+`~/Projects/threads-agent/scripts/deploy.sh` — no sudo, and no need to be root.
 
-The runner user's sudo is narrow — `/etc/sudoers.d/020_pi-deploy` grants
-passwordless root for the installer and nothing else:
+The deploy needs root for exactly one thing, the restart.
+`/etc/sudoers.d/020_pi-deploy` grants that and nothing else:
 
 ```sudoers
-pi ALL=(root) NOPASSWD: /opt/threads-agent/deploy/install.sh
+pi ALL=(root) NOPASSWD: /usr/bin/systemctl restart threads-agent
+pi ALL=(root) NOPASSWD: /usr/bin/systemctl restart threads-agent.service
 pi ALL=(root) NOPASSWD: /usr/bin/systemctl restart observer-api
 ```
 
-The second line belongs to the unrelated `observer` runner on the same Pi;
-removing the broad `NOPASSWD: ALL` without it would have broken that deploy.
+Both spellings of the unit, because `systemctl` accepts either while sudoers
+matches the command line literally — the same mismatch that made the first
+version of this deploy ask for a password. The last line belongs to the
+unrelated `observer` runner on the same Pi; removing the broad `NOPASSWD: ALL`
+without it would have broken that deploy.
 Note the limit of this: `pi` is still in the `docker` group, which is
 root-equivalent, so this narrows the obvious path rather than sealing the box.
 
@@ -151,20 +183,26 @@ sudo ./svc.sh install pi && sudo ./svc.sh start
 Optional everywhere else, but it is running here:
 
 ```sh
-sudo docker compose -f /opt/threads-agent/docker-compose.yml up -d
-sudo -u threads bash -c 'cd /opt/threads-agent && npm run db:migrate'
+sudo docker compose -f ~/Projects/threads-agent/docker-compose.yml up -d
+cd ~/Projects/threads-agent && npm run db:migrate
 ```
 
-`POSTGRES_*` and `DATABASE_URL` go into `/opt/threads-agent/.env` with a
+`POSTGRES_*` and `DATABASE_URL` go into `~/Projects/threads-agent/.env` with a
 generated password, not the `threads:threads` default from `.env.example` — the
 port is on loopback, but every process on the machine can reach it.
 
-The container runs under root and the service talks to it over TCP; `threads` is
-deliberately **not** in the `docker` group, since that group is root-equivalent
-and a Postgres client needs nothing of the sort. `restart: unless-stopped` brings
-it back after a reboot. `threads-agent.service` has no `After=docker.service`,
-so on boot the server may start first — `tryRecord` swallows the failure, and
-only the first few history writes are lost.
+The container runs under root and the service talks to it over TCP, so the
+service itself needs no Docker access. Note what changed when the deployment
+moved out of `/opt`: it used to run as a `threads` user kept deliberately out of
+the `docker` group, and now runs as `pi`, which is in it — and that group is
+root-equivalent. The migration did not grant that; `pi` had it already for the
+other projects here. It does mean the service user is no longer isolated from
+the machine, which is the price of the shared layout.
+
+`restart: unless-stopped` brings the container back after a reboot.
+`threads-agent.service` has no `After=docker.service`, so on boot the server may
+start first — `tryRecord` swallows the failure, and only the first few history
+writes are lost.
 
 ## The tunnel
 

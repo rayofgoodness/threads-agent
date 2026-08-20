@@ -57,21 +57,24 @@ jobs:
 
   # Deploy runs on the Pi itself, through a self-hosted runner. Gated on `push`
   # to master so a pull request from a fork can never reach the machine — the
-  # repo is public and the runner's user has passwordless sudo.
+  # repo is public, and the deployment is the `pi` user's own home directory.
   deploy:
     needs: check
     if: >-
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
       && github.ref == 'refs/heads/master'
     runs-on: [self-hosted, threads-agent]
-    timeout-minutes: 30
+    # npm ci plus a Vite build on ARM is slow; observer-app and foodie allow the
+    # same 40.
+    timeout-minutes: 40
 
     steps:
-      # No checkout: install.sh pulls into /opt/threads-agent itself, so the
-      # runner's own working copy never becomes a second source of truth.
-      #
-      # By path, not `sudo bash <path>`: sudoers matches the whole command line,
-      # and 020_pi-deploy grants the script — `bash` with it as an argument is a
-      # different command, which falls through to the password-prompting rule.
-      - name: Pull, rebuild and restart
-        run: sudo /opt/threads-agent/deploy/install.sh
+      # Чекаут у робочу папку runner'а — тільки заради самого скрипта, щоб
+      # деплой виконувався тією версією deploy.sh, що прийшла в цьому коміті.
+      # Прод-папку скрипт оновлює сам (APP_DIR), своїм git fetch/merge.
+      - uses: actions/checkout@v5
+
+      - name: Deploy
+        run: ./scripts/deploy.sh
+        env:
+          APP_DIR: /home/pi/Projects/threads-agent

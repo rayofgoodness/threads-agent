@@ -39,6 +39,10 @@ __screenshots__/
 *.timestamp-*-*.mjs
 
 .env
+# Копії, які лишає deploy/install.sh при переїзді (.env.opt-backup,
+# .env.dev-backup). Той самий секрет — у публічний репозиторій йому не можна.
+.env.*
+!.env.example
 content/monitor-state.json
 content/publish.log
 content/launchd.*.log

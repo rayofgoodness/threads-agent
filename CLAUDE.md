@@ -250,6 +250,30 @@ Two environment variables matter there and nowhere else: `HOST` (default
 `127.0.0.1`) and `THREADS_AGENT_TOKEN`. The server refuses to bind a non-
 loopback address without the token, because `/api` can publish and delete.
 
+The deployment is `/home/pi/Projects/threads-agent`, running as `pi` — working
+copy and production are the same tree, matching `observer-app` and `foodie` on
+the same Pi. It used to be `/opt/threads-agent` under a dedicated `threads`
+user; that was moved on 20 August 2026 for one layout across every project on
+the machine. Two consequences worth holding on to:
+
+- The units carry `ProtectHome=false`. Under `/home` it cannot be otherwise —
+  `ProtectHome=true` hides the working directory from the process serving it.
+- Since the tree is also where you edit, `scripts/deploy.sh` refuses to run with
+  uncommitted changes. That refusal is the only thing standing between an
+  automatic deploy and unsaved work, so do not weaken it.
+
+`scripts/deploy.sh` is the deploy and needs no root: dirty-tree check,
+`merge --ff-only origin/master`, `npm ci`, `npm test`, `npm run build`, restart,
+then `/api/health` (which needs the `Bearer` token) with a rollback to the
+previous commit if it never answers. `deploy/install.sh` is separate and is
+first-time *setup* — units, the sudoers rule, and the one-time migration off
+`/opt`. Root is needed for exactly one step of a deploy, `systemctl restart
+threads-agent`, and `/etc/sudoers.d/020_pi-deploy` grants that alone.
+
+Note that sudoers matches the whole command line: `sudo bash <script>` does not
+match a rule written for `<script>`, which is what made the first automated
+deploy sit waiting for a password on a runner with no TTY.
+
 ### The API server
 
 `server/` puts the client behind same-origin JSON routes so the token stays out

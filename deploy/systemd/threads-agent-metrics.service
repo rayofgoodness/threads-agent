@@ -6,20 +6,21 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=threads
-Group=threads
-WorkingDirectory=/opt/threads-agent
-EnvironmentFile=/opt/threads-agent/.env
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/Projects/threads-agent
+EnvironmentFile=/home/pi/Projects/threads-agent/.env
 
 # Without DATABASE_URL the sweep exits having made no API call at all, so this
 # unit is harmless on a deployment that runs no database.
 Environment=THREADS_AGENT_NODE=/usr/bin/node
-ExecStart=/opt/threads-agent/scripts/collect-metrics.sh
+ExecStart=/home/pi/Projects/threads-agent/scripts/collect-metrics.sh
 
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/opt/threads-agent/content
+# Off because the deployment lives under /home; see threads-agent.service.
+ProtectHome=false
+ReadWritePaths=/home/pi/Projects/threads-agent/content
 
 SyslogIdentifier=threads-agent-metrics
