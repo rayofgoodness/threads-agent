@@ -179,9 +179,12 @@ Findings from working against the live account, not guesses:
 
 - **Deleting needs `threads_delete`.** Without it the call fails _after_ the post
   is already public, and it then has to be removed by hand.
-- **Mentions are gated.** `/me/mentions` answers `code 10` subcode 4279067
-  ("insufficient app access level") even with `threads_manage_mentions` in the
-  token. Needs App Review.
+- **A scope in the token is not the same as a permission on the use case.**
+  `/me/mentions` answered `code 10` subcode 4279067 ("insufficient app access
+  level") while `threads_manage_mentions` was present in the token, because the
+  permission had never been added to the use case. The API reports that as an
+  access-level error, which reads like App Review and is not. Check the
+  Permissions and features table before assuming a review is needed.
 - **Keyword search is limited twice over.** At the default access level it
   returns only the account's own posts, and the query is a single word —
   multi-word phrases match nothing rather than falling back to OR.

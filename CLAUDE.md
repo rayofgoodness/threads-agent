@@ -188,9 +188,13 @@ one blocked source does not hide the others. What each is worth today:
 - **Replies** work. Note `/me/replies` returns replies *written by* the account,
   which is outbound noise — inbound means walking recent posts and reading
   `/{post}/replies`, one call per post. That is why `/api/signals` is on-demand.
-- **Mentions** are blocked: `/me/mentions` answers `code 10` subcode 4279067
-  ("insufficient app access level") even though `threads_manage_mentions` is in
-  the token. Needs App Review, not a settings change.
+- **Mentions** work. They answered `code 10` subcode 4279067 ("insufficient app
+  access level") for months while `threads_manage_mentions` sat in the token —
+  the permission was simply never added to the use case. A token can carry a
+  scope the use case does not list, and the API reports that as an access-level
+  error, which reads like App Review and is not. Fixed on 20 August 2026 with
+  App Dashboard → Use Case «Access the Threads API» → Permissions and features →
+  **Add** on the row. The same token then worked with no regeneration.
 - **Keyword search** responds but at the default access level returns only the
   account's own posts, which the monitor filters out as self-noise. Queries are
   single words — multi-word phrases match nothing rather than falling back to OR.
