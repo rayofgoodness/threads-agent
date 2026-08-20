@@ -6,9 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Threads API agent for the Casy account. Two independent parts in one repo:
 
-- `src/` — Vue 3 + Vite + TypeScript app, the agent's UI. Currently still the
-  unmodified `create-vue` scaffold (`HelloWorld.vue`, `TheWelcome.vue`, icons);
-  treat it as disposable, not as an existing design to preserve.
+- `src/` — Vue 3 + Vite + TypeScript app, the agent's UI. Four screens behind a
+  nav rail (`src/views/`), one shared store (`composables/useDashboard.ts`), and
+  a design system in `src/assets/main.css`. `src/threads/` is the API client and
+  is server-side only; see below.
 - `docs/` — hand-written static HTML (no build step) served live at
   <https://rayofgoodness.github.io/threads-agent/> for Meta App Review:
   privacy policy, data deletion instructions, and the OAuth redirect target
@@ -29,8 +30,9 @@ Current state and open tasks: @PROGRESS.md
   It loads `.env` itself via `process.loadEnvFile`, so no `source` needed.
 - `node scripts/agent.ts <command>` — content queue and scheduling
   (`list`, `add`, `check`, `due`, `run`, `published`, `slots`, `plan`,
-  `generate`). `run` is a dry run; only `run --yes` publishes, and `generate`
-  only queues with `--yes`.
+  `generate`, `metrics`). `run` is a dry run; only `run --yes` publishes, and
+  `generate` only queues with `--yes`. `metrics` takes the post readings the
+  cadence says are due and does nothing at all without `DATABASE_URL`.
 - `node scripts/threads.ts <command>` — terminal access to the Threads client
   (`whoami`, `token`, `limits`, `posts`, `post`, `delete`, `insights`, `replies`).
   Needs `source .env` first. Node type-strips the `.ts` directly, no build step —
@@ -195,9 +197,15 @@ one blocked source does not hide the others. What each is worth today:
   error, which reads like App Review and is not. Fixed on 20 August 2026 with
   App Dashboard → Use Case «Access the Threads API» → Permissions and features →
   **Add** on the row. The same token then worked with no regeneration.
-- **Keyword search** responds but at the default access level returns only the
-  account's own posts, which the monitor filters out as self-noise. Queries are
-  single words — multi-word phrases match nothing rather than falling back to OR.
+- **Keyword search** is off. `monitor.keywordSearch: false` in
+  `agent.config.json` skips the channel entirely — no call, and nothing in
+  `unavailable`, which carries breakage and not decisions. It was never usable:
+  at the default access level the search returns only the account's own posts,
+  and Advanced Access needs a verified company that does not exist behind this
+  account. The watch words stay in the config for the day that changes. The flag
+  defaults to `true`, so a config written before it existed behaves as it did.
+  Queries are single words — multi-word phrases match nothing rather than
+  falling back to OR.
 
 ### Scheduled publishing
 
@@ -256,12 +264,53 @@ serving the old values. `/api/generate` costs an Anthropic call, so it is a
 POST and never runs on load. `vite.config.ts` proxies `/api` to port 8788 in
 development, so the Vue app calls `/api/...` with no CORS involved.
 
+### Metric capture
+
+`post_metrics` is one row per reading, so a post's curve only exists if
+something took the readings. `agent/metrics.ts` owns the cadence: every three
+hours while a post is under two days old, daily to the end of its first week,
+never after. `collectMetrics` reads what is due and writes one row each; a post
+that fails takes only itself down. Without `DATABASE_URL` it makes no API call
+at all, since there would be nowhere to put the answer.
+
+Three entry points, same function: `agent.ts metrics` by hand,
+`POST /api/metrics/collect` from the dashboard button, and
+`scripts/collect-metrics.sh` under `deploy/systemd/threads-agent-metrics.timer`
+(hourly — the per-post cadence, not the timer, decides what is actually read).
+
 ### The Vue app
+
+Four screens — Огляд, Контент, Стрічка, Налаштування — selected by
+`location.hash` through `composables/useView.ts`. No router: four screens do not
+earn the dependency, and the hash already gives back, forward and a link that
+survives being sent to a phone.
+
+`composables/useDashboard.ts` is the one store every view shares, provided by
+`App.vue` and injected by anything below it. Panels no longer own their own copy
+of the queue or poke siblings through template refs — that worked while
+everything was on one page and breaks the moment the generator and the queue
+live on different screens.
 
 `src/api/client.ts` talks to `/api` only — it shares *types* with `src/threads/`
 but never imports the client itself, which is what keeps the token out of the
 bundle. `src/composables/useResource.ts` holds the load/error/pending pattern
 every panel uses; it keeps the old value on refresh so the feed does not blank.
+
+`src/assets/main.css` is the whole design system: light is the base palette and
+the dark block only re-points the same custom properties, so no component ever
+branches on theme. Two rules that are not negotiable — every number carries
+`font-variant-numeric: tabular-nums` (the `.num` class, plus `time`), and the
+faint ink tier `--fg-3` is held above 4.5:1 against every ground it lands on,
+because it carries real text and not decoration.
+
+Icons are authored SVG in `src/components/AppIcon.vue`, one 24-grid and one
+stroke weight. No icon dependency, and no emoji standing in for an icon.
+
+Pure logic that would be awkward to test through a component lives in
+`src/lib/` with its tests beside it: `slots.ts` resolves the configured
+wall-clock slots into instants in the account's timezone (which is why it
+survives a DST change), and `plural.ts` does Ukrainian numeral agreement, since
+«4 слотів» reads like machine output.
 
 Run both processes in development: `npm run server` and `npm run dev`.
 

@@ -19,9 +19,9 @@ holds only what git is bad at: generation history and post metrics over time.
 | Path           | What it is                                                                     |
 | -------------- | ------------------------------------------------------------------------------ |
 | `src/threads/` | Typed Threads API client. Server-side only — it carries the access token.      |
-| `agent/`       | Queue, schedule, guardrails, drafting, inbound monitoring.                     |
+| `agent/`       | Queue, schedule, guardrails, drafting, inbound monitoring, metric capture.     |
 | `server/`      | JSON API over the client, so the browser never sees the token.                 |
-| `src/`         | Vue 3 dashboard: composer, feed, metrics, inbound signals.                     |
+| `src/`         | Vue 3 dashboard — four screens: overview, content, feed, settings.             |
 | `scripts/`     | Two CLIs — `threads.ts` for direct API calls, `agent.ts` for the content loop. |
 | `content/`     | Drafts, the queue, published history, the plan and the knowledge base.         |
 | `db/`          | Optional Postgres: generation history and post metrics. Schema and migration.  |
@@ -187,7 +187,9 @@ Findings from working against the live account, not guesses:
   Permissions and features table before assuming a review is needed.
 - **Keyword search is limited twice over.** At the default access level it
   returns only the account's own posts, and the query is a single word —
-  multi-word phrases match nothing rather than falling back to OR.
+  multi-word phrases match nothing rather than falling back to OR. It is
+  therefore off (`monitor.keywordSearch: false`); lifting the first limit needs
+  Advanced Access, which needs a verified company.
 - **The feed lags writes by a few seconds.** A deleted post can still appear in
   `/me/threads` while `GET /{id}` already reports it gone.
 - **Publishing is two calls** — create a container, then publish it. Text needs
