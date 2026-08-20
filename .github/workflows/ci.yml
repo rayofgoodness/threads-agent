@@ -69,5 +69,9 @@ jobs:
     steps:
       # No checkout: install.sh pulls into /opt/threads-agent itself, so the
       # runner's own working copy never becomes a second source of truth.
+      #
+      # By path, not `sudo bash <path>`: sudoers matches the whole command line,
+      # and 020_pi-deploy grants the script — `bash` with it as an argument is a
+      # different command, which falls through to the password-prompting rule.
       - name: Pull, rebuild and restart
-        run: sudo bash /opt/threads-agent/deploy/install.sh
+        run: sudo /opt/threads-agent/deploy/install.sh
