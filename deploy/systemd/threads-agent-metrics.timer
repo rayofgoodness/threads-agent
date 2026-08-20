@@ -1,0 +1,15 @@
+[Unit]
+Description=Read post metrics hourly
+
+[Timer]
+# Hourly, not because a post is read that often, but because the cadence in
+# agent/metrics.ts is per post: a sweep this frequent is what lets a post
+# published at 09:37 get its three-hour readings near 12:37 rather than at
+# whatever time the timer happened to fire.
+OnBootSec=10min
+OnUnitActiveSec=1h
+Persistent=true
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target

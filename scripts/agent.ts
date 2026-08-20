@@ -31,6 +31,8 @@ import {
   tryRecord,
 } from '../db/index.ts'
 import { nextSlots as slotsAfter } from '../agent/schedule.ts'
+import { collectMetrics } from '../agent/metrics.ts'
+import { ThreadsClient } from '../src/threads/index.ts'
 
 /** Bound to the loaded config so the call sites stay `nextSlots(n)`. */
 const nextSlots = (count?: number) => slotsAfter(config, count)
@@ -55,6 +57,7 @@ Commands:
   drop <file>             delete a draft
   history [--limit N]     past generations, if a database is configured
   watch [--all]           inbound signals: replies, mentions, watched keywords
+  metrics                 take the post readings that are due (needs DATABASE_URL)
 `
 
 function flag(name: string): string | undefined {
@@ -151,6 +154,21 @@ async function main() {
 
       for (const gap of report.unavailable) {
         console.log(`недоступно (${gap.source}): ${gap.reason}`)
+      }
+      return
+    }
+
+    case 'metrics': {
+      const report = await collectMetrics({ client: ThreadsClient.fromEnv() })
+
+      if (!report.enabled) {
+        return console.log('Нема DATABASE_URL — читати нікуди, жодного запиту не зроблено.')
+      }
+      console.log(
+        `Переглянуто ${report.considered}, знято ${report.captured.length}, пропущено ${report.skipped}.`,
+      )
+      for (const failure of report.failed) {
+        console.log(`не вдалося (${failure.postId}): ${failure.reason}`)
       }
       return
     }

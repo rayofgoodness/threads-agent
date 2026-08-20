@@ -83,6 +83,8 @@ note "ставлю systemd-юніти"
 install -m 644 "$APP_DIR/deploy/systemd/threads-agent.service" /etc/systemd/system/
 install -m 644 "$APP_DIR/deploy/systemd/threads-agent-publish.service" /etc/systemd/system/
 install -m 644 "$APP_DIR/deploy/systemd/threads-agent-publish.timer" /etc/systemd/system/
+install -m 644 "$APP_DIR/deploy/systemd/threads-agent-metrics.service" /etc/systemd/system/
+install -m 644 "$APP_DIR/deploy/systemd/threads-agent-metrics.timer" /etc/systemd/system/
 systemctl daemon-reload
 
 if [ -n "${ENV_WAS_CREATED:-}" ]; then
@@ -92,8 +94,11 @@ if [ -n "${ENV_WAS_CREATED:-}" ]; then
 
   sudo systemctl enable --now threads-agent.service
   sudo systemctl enable --now threads-agent-publish.timer
+  sudo systemctl enable --now threads-agent-metrics.timer
 
-Таймер публікує з черги без підтвердження — вмикай, коли впевнений у вмісті.
+Таймер публікації публікує з черги без підтвердження — вмикай, коли впевнений
+у вмісті. Таймер метрик лише читає; без DATABASE_URL він не робить жодного
+запиту.
 EOF
   exit 0
 fi
@@ -113,9 +118,11 @@ fi
 
 cat <<EOF
 
-Готово. Таймер публікації окремо:
+Готово. Таймери вмикаються окремо:
 
   sudo systemctl enable --now threads-agent-publish.timer
+  sudo systemctl enable --now threads-agent-metrics.timer
 
-Він публікує з черги без підтвердження.
+Перший публікує з черги без підтвердження. Другий лише знімає метрики постів
+і без DATABASE_URL не робить жодного запиту.
 EOF

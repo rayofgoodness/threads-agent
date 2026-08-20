@@ -30,11 +30,13 @@ import {
   isDbEnabled,
   listGenerations,
   markDraftQueued,
+  metricSeries,
   metricsHistory,
   recordGeneration,
   recordMetrics,
   tryRecord,
 } from '../db/index.ts'
+import { collectMetrics } from '../agent/metrics.ts'
 import { checkAuth, resolveBinding } from './auth.ts'
 import { createHandler, HttpError, Router, send } from './http.ts'
 import { serveStatic } from './static.ts'
@@ -246,6 +248,27 @@ router.get('/api/db', async () => ({ enabled: isDbEnabled() }))
 
 /** Analytics: one row per reading, so the numbers can be compared over time. */
 router.get('/api/posts/:id/metrics', async ({ params }) => metricsHistory(params.id!))
+
+/**
+ * Every stored reading for a set of posts, in one call.
+ *
+ * The overview ranks a page of posts and draws a curve under each; asking per
+ * post would be one round trip per row for data that is already in one table.
+ */
+router.get('/api/metrics/series', async ({ query }) => {
+  const ids = (query.get('ids') ?? '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean)
+  if (!ids.length) return {}
+  return metricSeries(ids.slice(0, 50))
+})
+
+/**
+ * Take the readings that are due. Safe to call often — the cadence in
+ * `agent/metrics.ts`, not the caller, decides what actually gets read.
+ */
+router.post('/api/metrics/collect', async () => collectMetrics({ client }))
 
 router.post('/api/posts/:id/metrics', async ({ params }) => {
   const insights = await client.postInsights(params.id!)

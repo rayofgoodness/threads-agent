@@ -230,3 +230,69 @@ export async function metricsHistory(postId: string, limit = 100): Promise<Metri
     quotes: row.quotes,
   }))
 }
+
+/**
+ * When each of these posts was last read.
+ *
+ * The collector needs it to decide what is due; asking per post would mean one
+ * round trip per post on every sweep, and the whole point of the sweep is that
+ * it is cheap enough to run on a timer.
+ */
+export async function lastCaptures(postIds: string[]): Promise<Map<string, string>> {
+  const active = getPool()
+  if (!active || !postIds.length) return new Map()
+  const { rows } = await active.query<{ post_id: string; captured_at: Date }>(
+    `SELECT post_id, max(captured_at) AS captured_at
+       FROM post_metrics
+      WHERE post_id = ANY($1::text[])
+      GROUP BY post_id`,
+    [postIds],
+  )
+  return new Map(rows.map((row) => [row.post_id, row.captured_at.toISOString()]))
+}
+
+/**
+ * Every reading for each of these posts, oldest first.
+ *
+ * Oldest first because the caller draws a curve from it, and a chart that has
+ * to reverse its own input is a chart that will eventually forget to.
+ */
+export async function metricSeries(
+  postIds: string[],
+  limitPerPost = 60,
+): Promise<Record<string, MetricSample[]>> {
+  const active = getPool()
+  if (!active || !postIds.length) return {}
+  const { rows } = await active.query<{
+    post_id: string
+    captured_at: Date
+    views: number | null
+    likes: number | null
+    replies: number | null
+    reposts: number | null
+    quotes: number | null
+  }>(
+    `SELECT * FROM (
+       SELECT *, row_number() OVER (PARTITION BY post_id ORDER BY captured_at DESC) AS rank
+         FROM post_metrics
+        WHERE post_id = ANY($1::text[])
+     ) ranked
+      WHERE rank <= $2
+      ORDER BY post_id, captured_at ASC`,
+    [postIds, limitPerPost],
+  )
+
+  const series: Record<string, MetricSample[]> = {}
+  for (const row of rows) {
+    ;(series[row.post_id] ??= []).push({
+      postId: row.post_id,
+      capturedAt: row.captured_at.toISOString(),
+      views: row.views,
+      likes: row.likes,
+      replies: row.replies,
+      reposts: row.reposts,
+      quotes: row.quotes,
+    })
+  }
+  return series
+}
